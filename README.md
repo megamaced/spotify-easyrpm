@@ -4,7 +4,7 @@ Description: spotify-easyrpm downloads the latest debian package from the Spotif
 
 Usage: Run without any arguments
 
-Designed to work on openSUSE / SUSE Enterprise. Can't make any promises for other distros
+Designed to work on openSUSE / SUSE Enterprise Desktop. Won't work properly on other distros
 
 This script is installable from the Open Build Service
 https://software.opensuse.org/package/spotify-easyrpm?search_term=spotify-easyrpm

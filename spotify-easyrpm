@@ -1,0 +1,230 @@
+#!/bin/bash
+#
+# spotify-easyrpm downloads the latest debian package from the Spotify
+# repository and converts it into an RPM and then installs it for you
+#
+# Just re-run this script whenever there is a new Spotify release
+#
+
+USERNAME="$(whoami)"
+SYSARCH="$(uname -p)"
+SOURCESDIR=~/rpmbuild/SOURCES
+SPECSDIR=~/rpmbuild/SPECS
+if [[ "${SYSARCH}" == i686 ]]; then
+ DEBARCH=i386
+ RPMARCH=i586
+elif [[ "${SYSARCH}" == x86_64 ]]; then
+ DEBARCH=amd64
+ RPMARCH=x86_64
+fi
+
+f_error() {
+echo "$1" 1>&2
+exit 1
+}
+
+f_desktopentry() {
+cat << EOF >> "${SOURCESDIR}"/spotify-client/usr/share/applications/spotify.desktop
+[Desktop Entry]
+Name=Spotify
+GenericName=Music Player
+Comment=Spotify streaming music client
+Icon=/usr/share/spotify/icons/spotify-linux-64.png
+Exec=spotify %U
+TryExec=spotify
+Terminal=false
+Type=Application
+Categories=Audio;Music;Player;AudioVideo;
+MimeType=x-scheme-handler/spotify;
+EOF
+}
+
+f_preparebuild() {
+ar -x "${SOURCESDIR}"/spotify-client*"${DEBARCH}".deb
+rm control.tar.gz debian-binary
+mv data.tar.gz "${SOURCESDIR}"/
+tar xzf "${SOURCESDIR}"/data.tar.gz -C "${SOURCESDIR}"/
+mkdir -p "${SOURCESDIR}"/spotify-client
+mv "${SOURCESDIR}"/usr "${SOURCESDIR}"/spotify-client/
+mkdir -p "${SOURCESDIR}"/spotify-client/usr/share/applications
+f_desktopentry
+SPOTIFYVER="$(ls "${SOURCESDIR}"/spotify-client*.deb | cut -f2 -d"_" | cut -f1 -d"-")"
+tar czf "${SOURCESDIR}"/spotify-client-"${SPOTIFYVER}".tar.gz -C "${SOURCESDIR}"/ spotify-client
+}
+
+f_cleanup() {
+if [[ -f "${SOURCESDIR}"/index.html ]]; then
+ rm "${SOURCESDIR}"/index.html
+fi
+if [[ -f "${SOURCESDIR}"/data.tar.gz ]]; then
+ rm "${SOURCESDIR}"/data.tar.gz
+fi
+if [[ -d "${SOURCESDIR}"/usr ]]; then
+ rm -r "${SOURCESDIR}"/usr
+fi
+if [[ -d "${SOURCESDIR}"/spotify-client* ]] || [[ -f "${SOURCESDIR}"/spotify-client* ]]; then
+ rm -r "${SOURCESDIR}"/spotify-client*
+fi
+}
+
+# Quit if run as root
+if [[ "$(id -u)" == "0" ]]; then
+ f_error "Do not run as root"
+fi
+
+# help
+if [[ "$1" == "-h" ]] || [[ "$1" == "--help" ]]; then
+ echo "Usage: Just run spotify-easyrpm without any parameters"
+ echo ""
+ echo "spotify-easyrpm downloads the latest debian package from the Spotify"
+ echo "repository and converts it into an RPM and then installs it for you"
+ echo ""
+ echo "Just re-run this script whenever there is a new Spotify release"
+ exit 0
+fi
+
+echo "clean before starting"
+f_cleanup
+
+echo "Installing build dependencies"
+if ! sudo zypper --non-interactive in rpmbuild update-desktop-files; then
+f_error "Failed to install build dependencies. Aborting"
+fi
+
+echo "Creating rpmbuild dirs in ~/rpmbuild"
+if ! mkdir -p ~/rpmbuild/{BUILD,BUILDROOT,OTHER,RPMS,SOURCES,SPECS,SRPMS}; then
+f_error "Failed to create rpmbuild root. Aborting"
+fi
+
+echo "Creating .rpmmacros if it doesn't exist"
+if [[ ! -f ~/.rpmmacros ]]; then
+ cat << EOF | tee ~/.rpmmacros
+%_topdir /home/${USERNAME}/rpmbuild
+EOF
+fi
+
+echo "Downloading latest Spotify debs"
+if ! wget -e robots=off --no-directories --recursive --no-parent -P "${SOURCESDIR}"/ http://repository.spotify.com/pool/non-free/s/spotify-client/ -A spotify-client*"${DEBARCH}".deb; then
+f_error "Failed to download Spotify. Aborting"
+fi
+
+echo "Extracting deb and preparing for build"
+f_preparebuild
+
+echo "Backing up previous build file (if any)"
+if [[ -f "${SPECSDIR}"/spotify.spec ]]; then
+ mv "${SPECSDIR}"/spotify.spec "${SPECSDIR}"/spotify.spec.old
+fi
+
+echo "Writing new build file"
+
+cat << EOF | tee "${SPECSDIR}"/spotify.spec
+#
+# spec file for package spotify-client
+#
+# Copyright (c) 2015 SUSE LINUX Products GmbH, Nuernberg, Germany.
+#
+# All modifications and additions to the file contributed by third parties
+# remain the property of their copyright owners, unless otherwise agreed
+# upon. The license for this file, and modifications and additions to the
+# file, is the same license as for the pristine package itself (unless the
+# license for the pristine package is not an Open Source License, in which
+# case the license is the MIT License). An "Open Source License" is a
+# license that conforms to the Open Source Definition (Version 1.9)
+# published by the Open Source Initiative.
+
+# Please submit bugfixes or comments via http://bugs.opensuse.org/
+#
+
+Name:		spotify-client
+Version:	${SPOTIFYVER}
+Release:	0
+License:	https://www.spotify.com/legal/end-user-agreement
+Summary:	Spotify streaming music client
+Vendor:		Spotify AB
+Url:		https://www.spotify.com
+Source:		%{name}-%{version}.tar.gz
+BuildRoot:  %{_tmppath}/%{name}-%{version}-build
+BuildRequires:	update-desktop-files
+Requires:	libasound2
+Requires:	libcurl4
+Requires:	gconf2
+Requires:	libgtk-2_0-0
+Requires:	libglib-2_0-0
+Requires:	libgcrypt20
+Requires:	mozilla-nss
+Requires:	libudev1
+Requires:	libX11-6
+Requires:	libXtst6
+Requires:	libopenssl1_0_0
+Recommends:	libavcodec56
+Recommends:	libavformat56
+Recommends:	zenity
+Suggests:	libnotify4
+AutoReq:	no
+
+%description
+The Spotify desktop client unofficially supports Linux, meaning that there is a
+native client for Linux but we do not offer official support for client-related
+problems on this platform. If you are having severe problems with the native
+Linux client, there are a few alternatives that you can try:
+
+- Using the web player: https://play.spotify.com (requires Adobe Flash plugin)
+- Running the native Windows client in Wine (not recommended, but should work)
+
+Otherwise, the native Linux client is the recommended way to listen to Spotify
+on Linux systems.
+
+%prep
+%setup -n %{name} 
+
+%install
+mkdir -p %{buildroot}/usr
+cp -r usr %{buildroot}/
+
+%post
+
+%desktop_database_post
+
+%postun
+
+%desktop_database_postun
+
+%clean
+
+%files
+%defattr(-,root,root)
+#%doc ChangeLog README COPYING
+%dir /usr/share/spotify
+/usr/share/spotify/*
+/usr/bin/spotify
+/usr/share/doc/spotify-client/*
+/usr/share/applications/spotify.desktop
+EOF
+
+
+echo "Running rpm build"
+if ! rpmbuild -ba "${SPECSDIR}"/spotify.spec; then
+f_error "Spotify RPM failed to build. Aborting"
+else
+echo "Spotify RPM created in ~/rpmbuild/RPMS/"${RPMARCH}"/"
+fi
+
+while true
+do
+read -p "Do you wish to install it (y/n)? " answer
+
+ case $answer in
+ y ) sudo zypper --non-interactive --no-gpg-check in ~/rpmbuild/RPMS/"${RPMARCH}"/spotify-client-"${SPOTIFYVER}"*"${RPMARCH}".rpm
+   break;;
+
+ n )echo "bye"
+   exit;;
+
+ esac
+done
+
+echo "Cleaning up"
+f_cleanup
+
+echo "Done"

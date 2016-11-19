@@ -1,6 +1,6 @@
 # spotify-easyrpm
 
-Description: spotify-easyrpm downloads the latest debian package from the Spotify repository and converts it into an RPM and then installs it for you
+Description: spotify-easyrpm downloads the latest debian package from the Spotify repository and converts it into an RPM and then offers to install it for you
 
 Usage: Run without any arguments
 

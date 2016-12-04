@@ -6,10 +6,12 @@
 # Just re-run this script whenever there is a new Spotify release
 #
 
+
 USERNAME="$(whoami)"
 SYSARCH="$(uname -p)"
 SOURCESDIR=~/rpmbuild/SOURCES
 SPECSDIR=~/rpmbuild/SPECS
+
 if [[ "${SYSARCH}" == i686 ]]; then
  DEBARCH=i386
  RPMARCH=i586
@@ -17,6 +19,10 @@ elif [[ "${SYSARCH}" == x86_64 ]]; then
  DEBARCH=amd64
  RPMARCH=x86_64
 fi
+
+f_spotifyver() {
+SPOTIFYVER="$(ls "${SOURCESDIR}"/spotify-client*.deb | cut -f2 -d"_" | cut -f1 -d"-")"
+}
 
 f_error() {
 echo "$1" 1>&2
@@ -48,23 +54,15 @@ mkdir -p "${SOURCESDIR}"/spotify-client
 mv "${SOURCESDIR}"/usr "${SOURCESDIR}"/spotify-client/
 mkdir -p "${SOURCESDIR}"/spotify-client/usr/share/applications
 f_desktopentry
-SPOTIFYVER="$(ls "${SOURCESDIR}"/spotify-client*.deb | cut -f2 -d"_" | cut -f1 -d"-")"
+f_spotifyver
 tar czf "${SOURCESDIR}"/spotify-client-"${SPOTIFYVER}".tar.gz -C "${SOURCESDIR}"/ spotify-client
 }
 
 f_cleanup() {
-if [[ -f "${SOURCESDIR}"/index.html ]]; then
- rm "${SOURCESDIR}"/index.html
-fi
-if [[ -f "${SOURCESDIR}"/data.tar.gz ]]; then
- rm "${SOURCESDIR}"/data.tar.gz
-fi
-if [[ -d "${SOURCESDIR}"/usr ]]; then
- rm -r "${SOURCESDIR}"/usr
-fi
-if [[ -d "${SOURCESDIR}"/spotify-client* ]] || [[ -f "${SOURCESDIR}"/spotify-client* ]]; then
- rm -r "${SOURCESDIR}"/spotify-client*
-fi
+ rm "${SOURCESDIR}"/index.html > /dev/null 2>&1
+ rm "${SOURCESDIR}"/data.tar.gz > /dev/null 2>&1
+ rm -r "${SOURCESDIR:?}"/usr > /dev/null 2>&1
+ rm -r "${SOURCESDIR}"/spotify-client* > /dev/null 2>&1
 }
 
 # Quit if run as root
@@ -83,12 +81,23 @@ if [[ "$1" == "-h" ]] || [[ "$1" == "--help" ]]; then
  exit 0
 fi
 
-echo "clean before starting"
+clear
+
+echo "Clean before starting"
 f_cleanup
 
-echo "Installing build dependencies"
-if ! sudo zypper --non-interactive in rpmbuild update-desktop-files; then
-f_error "Failed to install build dependencies. Aborting"
+if ! rpm -q rpm-build > /dev/null 2>&1; then
+ echo "Installing build dependencies (rpm-build)"
+ if ! sudo zypper --non-interactive in rpm-build; then
+ f_error "Failed to install build dependencies. Aborting"
+ fi
+fi
+
+if ! rpm -q update-desktop-files > /dev/null 2>&1; then
+ echo "Installing build dependencies (update-desktop-files)"
+ if ! sudo zypper --non-interactive in update-desktop-files; then
+ f_error "Failed to install build dependencies. Aborting"
+ fi
 fi
 
 echo "Creating rpmbuild dirs in ~/rpmbuild"
@@ -106,6 +115,25 @@ fi
 echo "Downloading latest Spotify debs"
 if ! wget -e robots=off --no-directories --recursive --no-parent -P "${SOURCESDIR}"/ http://repository.spotify.com/pool/non-free/s/spotify-client/ -A spotify-client*"${DEBARCH}".deb; then
 f_error "Failed to download Spotify. Aborting"
+fi
+
+echo "Comparing downloaded version to installed version (if any)"
+f_spotifyver
+if [[ "$(rpm -q spotify-client | cut -f3 -d"-")" == "${SPOTIFYVER}" ]]; then
+ while true
+  do
+   read -rp "You have downloaded version ${SPOTIFYVER} which is already installed. Continue? (y/n)" CONTINUE
+    case $CONTINUE in
+ 
+      y ) echo "ok"
+      break;;
+
+      n ) f_cleanup
+          echo "bye"
+      exit;;
+
+   esac
+ done
 fi
 
 echo "Extracting deb and preparing for build"
@@ -176,7 +204,7 @@ Otherwise, the native Linux client is the recommended way to listen to Spotify
 on Linux systems.
 
 %prep
-%setup -n %{name} 
+%setup -q -n %{name} 
 
 %install
 mkdir -p %{buildroot}/usr
@@ -207,18 +235,19 @@ echo "Running rpm build"
 if ! rpmbuild -ba "${SPECSDIR}"/spotify.spec; then
 f_error "Spotify RPM failed to build. Aborting"
 else
-echo "Spotify RPM created in ~/rpmbuild/RPMS/"${RPMARCH}"/"
+echo "Spotify RPM created in ~/rpmbuild/RPMS/${RPMARCH}/"
 fi
 
 while true
 do
-read -p "Do you wish to install it (y/n)? " answer
+read -rp "Do you wish to install it (y/n)?" INSTALL
 
- case $answer in
+ case $INSTALL in
  y ) sudo zypper --non-interactive --no-gpg-check in ~/rpmbuild/RPMS/"${RPMARCH}"/spotify-client-"${SPOTIFYVER}"*"${RPMARCH}".rpm
    break;;
 
- n )echo "bye"
+ n ) f_cleanup
+   echo "bye"
    exit;;
 
  esac
@@ -228,3 +257,5 @@ echo "Cleaning up"
 f_cleanup
 
 echo "Done"
+exit 0
+

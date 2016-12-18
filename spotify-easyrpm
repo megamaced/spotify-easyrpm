@@ -21,7 +21,7 @@ elif [[ "${SYSARCH}" == x86_64 ]]; then
 fi
 
 f_spotifyver() {
-SPOTIFYVER="$(ls "${SOURCESDIR}"/spotify-client*.deb | cut -f2 -d"_" | cut -f1 -d"-")"
+SPOTIFYVER="$(find "${SOURCESDIR}"/ -name spotify-client*.deb | cut -f2 -d"_" | cut -f1 -d"-")"
 }
 
 f_error() {
@@ -46,7 +46,7 @@ EOF
 }
 
 f_preparebuild() {
-ar -x "${SOURCESDIR}"/spotify-client*"${DEBARCH}".deb
+ar -x "${SOURCESDIR}"/spotify-client*"${DEBARCH}".deb || f_error "Failed to extract deb"
 rm control.tar.gz debian-binary
 mv data.tar.gz "${SOURCESDIR}"/
 tar xzf "${SOURCESDIR}"/data.tar.gz -C "${SOURCESDIR}"/
@@ -107,7 +107,7 @@ fi
 
 echo "Creating .rpmmacros if it doesn't exist"
 if [[ ! -f ~/.rpmmacros ]]; then
- cat << EOF | tee ~/.rpmmacros
+ cat << EOF >> ~/.rpmmacros
 %_topdir /home/${USERNAME}/rpmbuild
 EOF
 fi
@@ -115,6 +115,12 @@ fi
 echo "Downloading latest Spotify debs"
 if ! wget -e robots=off --no-directories --recursive --no-parent -P "${SOURCESDIR}"/ http://repository.spotify.com/pool/non-free/s/spotify-client/ -A spotify-client*"${DEBARCH}".deb; then
 f_error "Failed to download Spotify. Aborting"
+fi
+
+echo "Checking if we downloaded multiple versions"
+if [[ "$(find "${SOURCESDIR}" -name spotify-client*.deb | wc -l)" -gt 1 ]]; then
+ echo "Removing the older downloaded versions"
+ find "${SOURCESDIR}" -name spotify-client*.deb | sort | sed \$d | xargs -d '\n' rm
 fi
 
 echo "Comparing downloaded version to installed version (if any)"
@@ -146,7 +152,7 @@ fi
 
 echo "Writing new build file"
 
-cat << EOF | tee "${SPECSDIR}"/spotify.spec
+cat << EOF >> "${SPECSDIR}"/spotify.spec
 #
 # spec file for package spotify-client
 #
@@ -232,7 +238,7 @@ EOF
 
 
 echo "Running rpm build"
-if ! rpmbuild -ba "${SPECSDIR}"/spotify.spec; then
+if ! rpmbuild -bb --quiet --clean "${SPECSDIR}"/spotify.spec; then
 f_error "Spotify RPM failed to build. Aborting"
 else
 echo "Spotify RPM created in ~/rpmbuild/RPMS/${RPMARCH}/"

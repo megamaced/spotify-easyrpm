@@ -5,6 +5,12 @@
 #
 # Just re-run this script whenever there is a new Spotify release
 #
+# Run without args, or with
+#
+# spotify-easyrpm -y (assume yes)
+#
+# spotify-easyrpm -scheduled (sets up a weekly cron job and local repo so Spotify updates are delivered with regular updates)  
+#
 
 
 USERNAME="$(whoami)"
@@ -59,10 +65,36 @@ tar czf "${SOURCESDIR}"/spotify-client-"${SPOTIFYVER}".tar.gz -C "${SOURCESDIR}"
 }
 
 f_cleanup() {
- rm "${SOURCESDIR}"/index.html > /dev/null 2>&1
- rm "${SOURCESDIR}"/data.tar.gz > /dev/null 2>&1
- rm -r "${SOURCESDIR:?}"/usr > /dev/null 2>&1
- rm -r "${SOURCESDIR}"/spotify-client* > /dev/null 2>&1
+rm "${SOURCESDIR}"/index.html > /dev/null 2>&1
+rm "${SOURCESDIR}"/data.tar.gz > /dev/null 2>&1
+rm -r "${SOURCESDIR:?}"/usr > /dev/null 2>&1
+rm -r "${SOURCESDIR}"/spotify-client* > /dev/null 2>&1
+}
+
+f_installrpm() {
+sudo zypper --non-interactive --no-gpg-check in ~/rpmbuild/RPMS/"${RPMARCH}"/spotify-client-"${SPOTIFYVER}"*"${RPMARCH}".rpm
+}
+
+f_createcron() {
+if ! rpm -q createrepo > /dev/null 2>&1; then
+ echo "Installing CreateRepo for local filesystem repo"
+ if ! sudo zypper --non-interactive in createrepo; then
+ f_error "Failed to install createrepo. Aborting"
+ fi
+fi
+if ! createrepo ~/rpmbuild/RPMS/; then
+ f_error "Failed to create local repo. Aborting"
+fi
+if [[ ! -f /etc/zypp/repos.d/${HOSTNAME}.repo ]]; then
+ if ! sudo zypper ar -G --refresh ~/rpmbuild/RPMS "${HOSTNAME}"; then
+  f_error "Failed to add local repo to zypper. Aborting" 
+ fi
+fi
+if [[ ! -f /etc/cron.d/spotify-easyrpm ]]; then
+ cat <<EOF | sudo tee /etc/cron.d/spotify-easyrpm
+@weekly $(whoami) /usr/bin/spotify-easyrpm -scheduled
+EOF
+fi
 }
 
 # Quit if run as root
@@ -78,7 +110,22 @@ if [[ "$1" == "-h" ]] || [[ "$1" == "--help" ]]; then
  echo "repository and converts it into an RPM and then installs it for you"
  echo ""
  echo "Just re-run this script whenever there is a new Spotify release"
+ echo ""
+ echo "Run without args, or with"
+ echo ""
+ echo " spotify-easyrpm -y (assume yes)"
+ echo ""
+ echo " spotify-easyrpm -scheduled (sets up a weekly cron job and local repo so Spotify updates are delivered with regular updates) "
  exit 0
+fi
+
+if [[ "$1" == "-y" ]] || [[ "$2" == "-y" ]]; then
+AUTOINSTALL="yes"
+fi
+
+if [[ "$1" == "-scheduled" ]] || [[ "$2" == "-scheduled" ]]; then
+AUTOINSTALL="no"
+SCHEDULED="yes"
 fi
 
 clear
@@ -126,6 +173,9 @@ fi
 echo "Comparing downloaded version to installed version (if any)"
 f_spotifyver
 if [[ "$(rpm -q spotify-client | cut -f3 -d"-")" == "${SPOTIFYVER}" ]]; then
+ if [[ "${SCHEDULED}" == yes ]]; then
+  exit 1
+ else
  while true
   do
    read -rp "You have downloaded version ${SPOTIFYVER} which is already installed. Continue? (y/n)" CONTINUE
@@ -140,6 +190,7 @@ if [[ "$(rpm -q spotify-client | cut -f3 -d"-")" == "${SPOTIFYVER}" ]]; then
 
    esac
  done
+ fi
 fi
 
 echo "Extracting deb and preparing for build"
@@ -244,20 +295,42 @@ else
 echo "Spotify RPM created in ~/rpmbuild/RPMS/${RPMARCH}/"
 fi
 
-while true
-do
-read -rp "Do you wish to install it (y/n)?" INSTALL
+if [[ "${AUTOINSTALL}" == "yes" ]]; then
+ f_installrpm
+elif [[ "${AUTOINSTALL}" == "no" ]]; then
+ echo "Scheduled job so skipping Spotify install"
+else
+ while true
+  do
+   read -rp "Do you wish to install it (y/n)?" INSTALL
 
- case $INSTALL in
- y ) sudo zypper --non-interactive --no-gpg-check in ~/rpmbuild/RPMS/"${RPMARCH}"/spotify-client-"${SPOTIFYVER}"*"${RPMARCH}".rpm
+  case $INSTALL in
+  y ) f_installrpm 
    break;;
 
- n ) f_cleanup
-   echo "bye"
-   exit;;
+  n ) break;;
 
- esac
-done
+  esac
+ done
+fi
+
+if [[ "${SCHEDULED}" == yes ]]; then
+ f_createcron
+else
+  while true
+  do
+   read -rp "Do you wish to set up a weekly cron job and local repo to enable updating Spotify alongside regular system updates (y/n)?" CRON
+
+  case $CRON in
+  y ) f_createcron
+   break;;
+
+  n ) break;;
+
+  esac
+ done
+fi
+
 
 echo "Cleaning up"
 f_cleanup

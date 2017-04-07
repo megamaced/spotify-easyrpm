@@ -1,22 +1,32 @@
 #!/bin/bash
 #
 # spotify-easyrpm downloads the latest debian package from the Spotify
-# repository and converts it into an RPM and then installs it for you
+# repository and converts it into an RPM and then offers to install it for you
 #
-# Just re-run this script whenever there is a new Spotify release
+# Run without args for the regular question based mode, or with
 #
-# Run without args, or with
+# spotify-easyrpm -noprompt
 #
-# spotify-easyrpm -y (assume yes)
+#  - Install the Spotify RPM
+#  - Cancel if the installed version is the same as the downloaded version
+#  - Set up a monthly cron job
+#  - Set up a local filesystem repo
 #
-# spotify-easyrpm -scheduled (sets up a weekly cron job and local repo so Spotify updates are delivered with regular updates)  
+# spotify-easyrpm -scheduled
+#
+#  - Special mode for the cron job  
+#
 #
 
-
+SCRIPTNAME="spotify-easyrpm"
 USERNAME="$(whoami)"
 SYSARCH="$(uname -p)"
-SOURCESDIR=~/rpmbuild/SOURCES
-SPECSDIR=~/rpmbuild/SPECS
+SOURCESDIR="${HOME}/rpmbuild/SOURCES"
+SPECSDIR="${HOME}/rpmbuild/SPECS"
+RPMSDIR="${HOME}/rpmbuild/RPMS"
+SPOTIFYREPO="http://repository.spotify.com/pool/non-free/s/spotify-client/"
+LOCALREPO="/var/cache/${SCRIPTNAME}"
+CRONFILE="/etc/cron.d/${SCRIPTNAME}"
 
 if [[ "${SYSARCH}" == i686 ]]; then
  DEBARCH=i386
@@ -24,6 +34,8 @@ if [[ "${SYSARCH}" == i686 ]]; then
 elif [[ "${SYSARCH}" == x86_64 ]]; then
  DEBARCH=amd64
  RPMARCH=x86_64
+else
+ f_error "Unsupported architecture. Aborting"
 fi
 
 f_spotifyver() {
@@ -32,6 +44,7 @@ SPOTIFYVER="$(find "${SOURCESDIR}"/ -name spotify-client*.deb | cut -f2 -d"_" | 
 
 f_error() {
 echo "$1" 1>&2
+f_cleanup
 exit 1
 }
 
@@ -65,6 +78,7 @@ tar czf "${SOURCESDIR}"/spotify-client-"${SPOTIFYVER}".tar.gz -C "${SOURCESDIR}"
 }
 
 f_cleanup() {
+echo "Cleaning up"
 rm "${SOURCESDIR}"/index.html > /dev/null 2>&1
 rm "${SOURCESDIR}"/data.tar.gz > /dev/null 2>&1
 rm -r "${SOURCESDIR:?}"/usr > /dev/null 2>&1
@@ -72,28 +86,60 @@ rm -r "${SOURCESDIR}"/spotify-client* > /dev/null 2>&1
 }
 
 f_installrpm() {
-sudo zypper --non-interactive --no-gpg-check in ~/rpmbuild/RPMS/"${RPMARCH}"/spotify-client-"${SPOTIFYVER}"*"${RPMARCH}".rpm
+sudo zypper --non-interactive --no-gpg-check in "${RPMSDIR}"/"${RPMARCH}"/spotify-client-"${SPOTIFYVER}"*"${RPMARCH}".rpm
 }
 
 f_createcron() {
+if [[ ! -f /usr/bin/"${SCRIPTNAME}" ]]; then
+ f_error "Please move ${SCRIPTNAME} to /usr/bin"
+fi
 if ! rpm -q createrepo > /dev/null 2>&1; then
  echo "Installing CreateRepo for local filesystem repo"
  if ! sudo zypper --non-interactive in createrepo; then
  f_error "Failed to install createrepo. Aborting"
  fi
 fi
-if ! createrepo ~/rpmbuild/RPMS/; then
- f_error "Failed to create local repo. Aborting"
+if [[ ! -d "${LOCALREPO}" ]]; then
+ echo "Creating local filesystem repo at ${LOCALREPO}"
+ if ! sudo mkdir -p ${LOCALREPO}; then
+  f_error "Failed to create local filesystem repo at ${LOCALREPO}. Aborting"
+ fi
 fi
-if [[ ! -f /etc/zypp/repos.d/${HOSTNAME}.repo ]]; then
- if ! sudo zypper ar -G --refresh ~/rpmbuild/RPMS "${HOSTNAME}"; then
+if ! "$(groups | grep -ow ${SCRIPTNAME})"; then
+ echo "Creating group ${SCRIPTNAME} and adding $(whoami)"
+ if ! sudo groupadd "${SCRIPTNAME}"; then
+  f_error "Failed to create group ${SCRIPTNAME}"
+ fi
+ if ! sudo usermod -aG "${SCRIPTNAME}" "$(whoami)"; then
+  f_error "Failed to add $(whoami) to group ${SCRIPTNAME}"
+ fi
+fi
+if ! sudo chgrp "${SCRIPTNAME}" "${LOCALREPO}"; then
+ f_error "Failed to chgrp ${SCRIPTNAME} ${LOCALREPO}"
+fi
+if ! sudo chmod g+rwx "${LOCALREPO}"; then
+ f_error "Failed to chmod ${LOCALREPO}"
+fi
+f_updatelocalrepo
+if [[ ! -f /etc/zypp/repos.d/${SCRIPTNAME}.repo ]]; then
+ echo "Adding local file system repository to zypper"
+ if ! sudo zypper ar -G --refresh "${LOCALREPO}" "${SCRIPTNAME}"; then
   f_error "Failed to add local repo to zypper. Aborting" 
  fi
 fi
-if [[ ! -f /etc/cron.d/spotify-easyrpm ]]; then
- cat <<EOF | sudo tee /etc/cron.d/spotify-easyrpm
-@weekly $(whoami) /usr/bin/spotify-easyrpm -scheduled
+if [[ ! -f "${CRONFILE}" ]]; then
+ echo "Creating cron job in ${CRONFILE}"
+ cat <<EOF | sudo tee "${CRONFILE}"
+@${FREQUENCY} $(whoami) /usr/bin/${SCRIPTNAME} -scheduled
 EOF
+fi
+}
+
+f_updatelocalrepo() {
+echo "Moving RPMs from your rpmbuild ${RPMSDIR} to your local repo ${LOCALREPO}"
+find "${RPMSDIR}"/"${RPMARCH}"/ -name spotify-client-*"${RPMARCH}".rpm -type -f -exec mv -t "${LOCALREPO}" {} \+
+if ! createrepo "${LOCALREPO}"; then
+ f_error "Failed to create local repo. Aborting"
 fi
 }
 
@@ -104,33 +150,49 @@ fi
 
 # help
 if [[ "$1" == "-h" ]] || [[ "$1" == "--help" ]]; then
- echo "Usage: Just run spotify-easyrpm without any parameters"
+ echo "Usage: Just run ${SCRIPTNAME} without any parameters"
  echo ""
- echo "spotify-easyrpm downloads the latest debian package from the Spotify"
+ echo "${SCRIPTNAME} downloads the latest debian package from the Spotify"
  echo "repository and converts it into an RPM and then installs it for you"
  echo ""
- echo "Just re-run this script whenever there is a new Spotify release"
+ echo " Run without args for the regular question based mode, or with"
  echo ""
- echo "Run without args, or with"
+ echo " ${SCRIPTNAME} -noprompt"
  echo ""
- echo " spotify-easyrpm -y (assume yes)"
+ echo "  - Install the Spotify RPM"
+ echo "  - Cancel if the installed version is the same as the downloaded version"
+ echo "  - Set up a monthly cron job"
+ echo "  - Set up a local filesystem repo"
  echo ""
- echo " spotify-easyrpm -scheduled (sets up a weekly cron job and local repo so Spotify updates are delivered with regular updates) "
  exit 0
 fi
 
-if [[ "$1" == "-y" ]] || [[ "$2" == "-y" ]]; then
-AUTOINSTALL="yes"
+if [[ "$1" == "-noprompt" ]]; then
+RUNMODE="defaults"
 fi
 
-if [[ "$1" == "-scheduled" ]] || [[ "$2" == "-scheduled" ]]; then
-AUTOINSTALL="no"
-SCHEDULED="yes"
+if [[ "$1" == "-scheduled" ]]; then
+RUNMODE="scheduled"
+fi
+
+if [[ -z "${RUNMODE}" ]]; then
+RUNMODE="prompt"
 fi
 
 clear
 
-echo "Clean before starting"
+
+if [[ "${RUNMODE}" != "scheduled" ]]; then
+echo "                     __________________                                                                     "
+echo "_______________________  /___(_)__  __/____  __      ___________ ____________  _______________________ ___  "
+echo "__  ___/__  __ \  __ \  __/_  /__  /_ __  / / /_______  _ \  __ `/_  ___/_  / / /_  ___/__  __ \_  __ `__ \ "
+echo "_(__  )__  /_/ / /_/ / /_ _  / _  __/ _  /_/ /_/_____/  __/ /_/ /_(__  )_  /_/ /_  /   __  /_/ /  / / / / / "
+echo "/____/ _  .___/\____/\__/ /_/  /_/    _\__, /        \___/\__,_/ /____/ _\__, / /_/    _  .___//_/ /_/ /_/  "
+echo "       /_/                            /____/                            /____/         /_/                  " 
+echo "                                                                                                            "
+sleep 3
+fi
+
 f_cleanup
 
 if ! rpm -q rpm-build > /dev/null 2>&1; then
@@ -147,20 +209,20 @@ if ! rpm -q update-desktop-files > /dev/null 2>&1; then
  fi
 fi
 
-echo "Creating rpmbuild dirs in ~/rpmbuild"
-if ! mkdir -p ~/rpmbuild/{BUILD,BUILDROOT,OTHER,RPMS,SOURCES,SPECS,SRPMS}; then
+echo "Creating rpmbuild dirs in ${HOME}/rpmbuild"
+if ! mkdir -p "${HOME}"/rpmbuild/{BUILD,BUILDROOT,OTHER,RPMS,SOURCES,SPECS,SRPMS}; then
 f_error "Failed to create rpmbuild root. Aborting"
 fi
 
 echo "Creating .rpmmacros if it doesn't exist"
-if [[ ! -f ~/.rpmmacros ]]; then
- cat << EOF >> ~/.rpmmacros
+if [[ ! -f "${HOME}"/.rpmmacros ]]; then
+ cat << EOF >> "${HOME}"/.rpmmacros
 %_topdir /home/${USERNAME}/rpmbuild
 EOF
 fi
 
 echo "Downloading latest Spotify debs"
-if ! wget -e robots=off --no-directories --recursive --no-parent -P "${SOURCESDIR}"/ http://repository.spotify.com/pool/non-free/s/spotify-client/ -A spotify-client*"${DEBARCH}".deb; then
+if ! wget -e robots=off --no-directories --recursive --no-parent -P "${SOURCESDIR}"/ "${SPOTIFYREPO}" -A spotify-client*"${DEBARCH}".deb; then
 f_error "Failed to download Spotify. Aborting"
 fi
 
@@ -173,8 +235,9 @@ fi
 echo "Comparing downloaded version to installed version (if any)"
 f_spotifyver
 if [[ "$(rpm -q spotify-client | cut -f3 -d"-")" == "${SPOTIFYVER}" ]]; then
- if [[ "${SCHEDULED}" == yes ]]; then
-  exit 1
+ if [[ "${RUNMODE}" != "prompt" ]]; then
+  f_cleanup
+  exit 0
  else
  while true
   do
@@ -292,14 +355,14 @@ echo "Running rpm build"
 if ! rpmbuild -bb --quiet --clean "${SPECSDIR}"/spotify.spec; then
 f_error "Spotify RPM failed to build. Aborting"
 else
-echo "Spotify RPM created in ~/rpmbuild/RPMS/${RPMARCH}/"
+echo "Spotify RPM created in ${RPMSDIR}/${RPMARCH}/"
 fi
 
-if [[ "${AUTOINSTALL}" == "yes" ]]; then
+if [[ "${RUNMODE}" == "defaults" ]]; then
  f_installrpm
-elif [[ "${AUTOINSTALL}" == "no" ]]; then
- echo "Scheduled job so skipping Spotify install"
-else
+elif [[ "${RUNMODE}" == "scheduled" ]]; then
+ f_updatelocalrepo 
+elif [[ "${RUNMODE}" == "prompt" ]]; then
  while true
   do
    read -rp "Do you wish to install it (y/n)?" INSTALL
@@ -314,25 +377,44 @@ else
  done
 fi
 
-if [[ "${SCHEDULED}" == yes ]]; then
+if [[ "${RUNMODE}" == "defaults" ]]; then
+ FREQUENCY="monthly"
  f_createcron
-else
+elif [[ "${RUNMODE}" == "prompt" ]]; then
   while true
   do
-   read -rp "Do you wish to set up a weekly cron job and local repo to enable updating Spotify alongside regular system updates (y/n)?" CRON
+   read -rp "Do you wish to set up a cron job and local repo to enable updating Spotify alongside regular system updates (y/n)?" WANTCRON
 
-  case $CRON in
-  y ) f_createcron
+  case $WANTCRON in
+  y ) ASKFREQUENCY="yes"
    break;;
 
-  n ) break;;
+  n ) echo "ok" 
+   break;;
 
   esac
  done
 fi
 
+if [[ "${ASKFREQUENCY}" == "yes" ]]; then
+  while true
+  do
+   read -rp "How often do you want to check for updates (weekly/monthly)?" FREQUENCYANSWER
 
-echo "Cleaning up"
+  case $FREQUENCYANSWER in
+  weekly ) FREQUENCY="weekly"
+           f_createcron
+   break;;
+
+  monthly ) FREQUENCY="monthly"
+           f_createcron
+   break;;
+
+  esac
+ done
+
+fi
+
 f_cleanup
 
 echo "Done"

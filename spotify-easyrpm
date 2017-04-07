@@ -105,19 +105,10 @@ if [[ ! -d "${LOCALREPO}" ]]; then
   f_error "Failed to create local filesystem repo at ${LOCALREPO}. Aborting"
  fi
 fi
-if ! "$(groups | grep -ow ${SCRIPTNAME})"; then
- echo "Creating group ${SCRIPTNAME} and adding $(whoami)"
- if ! sudo groupadd "${SCRIPTNAME}"; then
-  f_error "Failed to create group ${SCRIPTNAME}"
- fi
- if ! sudo usermod -aG "${SCRIPTNAME}" "$(whoami)"; then
-  f_error "Failed to add $(whoami) to group ${SCRIPTNAME}"
- fi
+if ! sudo find ${LOCALREPO} -type d -exec chmod 777 {} \+; then
+ f_error "Failed to chmod ${LOCALREPO}"
 fi
-if ! sudo chgrp "${SCRIPTNAME}" "${LOCALREPO}"; then
- f_error "Failed to chgrp ${SCRIPTNAME} ${LOCALREPO}"
-fi
-if ! sudo chmod g+rwx "${LOCALREPO}"; then
+if ! sudo find ${LOCALREPO} -type f -exec chmod 666 {} \+; then
  f_error "Failed to chmod ${LOCALREPO}"
 fi
 f_updatelocalrepo
@@ -137,10 +128,20 @@ fi
 
 f_updatelocalrepo() {
 echo "Moving RPMs from your rpmbuild ${RPMSDIR} to your local repo ${LOCALREPO}"
-find "${RPMSDIR}"/"${RPMARCH}"/ -name spotify-client-*"${RPMARCH}".rpm -type -f -exec mv -t "${LOCALREPO}" {} \+
+find "${RPMSDIR}"/"${RPMARCH}"/ -name spotify-client-*"${RPMARCH}".rpm -type f -exec mv -t "${LOCALREPO}" {} \+
 if ! createrepo "${LOCALREPO}"; then
  f_error "Failed to create local repo. Aborting"
 fi
+}
+
+f_logo() {
+cat <<EOF
+
+┌─┐┌─┐┌─┐┌┬┐┬┌─┐┬ ┬   ┌─┐┌─┐┌─┐┬ ┬┬─┐┌─┐┌┬┐
+└─┐├─┘│ │ │ │├┤ └┬┘───├┤ ├─┤└─┐└┬┘├┬┘├─┘│││
+└─┘┴  └─┘ ┴ ┴└   ┴    └─┘┴ ┴└─┘ ┴ ┴└─┴  ┴ ┴
+
+EOF
 }
 
 # Quit if run as root
@@ -150,20 +151,22 @@ fi
 
 # help
 if [[ "$1" == "-h" ]] || [[ "$1" == "--help" ]]; then
- echo "Usage: Just run ${SCRIPTNAME} without any parameters"
- echo ""
- echo "${SCRIPTNAME} downloads the latest debian package from the Spotify"
- echo "repository and converts it into an RPM and then installs it for you"
- echo ""
- echo " Run without args for the regular question based mode, or with"
- echo ""
- echo " ${SCRIPTNAME} -noprompt"
- echo ""
- echo "  - Install the Spotify RPM"
- echo "  - Cancel if the installed version is the same as the downloaded version"
- echo "  - Set up a monthly cron job"
- echo "  - Set up a local filesystem repo"
- echo ""
+f_logo
+cat <<EOF
+
+${SCRIPTNAME} downloads the latest debian package from the Spotify
+repository and converts it into an RPM and then installs it for you
+
+ Run without args for the regular question based mode, or with
+
+ ${SCRIPTNAME} -noprompt
+
+  - Install the Spotify RPM
+  - Cancel if the installed version is the same as the downloaded version
+  - Set up a monthly cron job
+  - Set up a local filesystem repo
+
+EOF
  exit 0
 fi
 
@@ -183,13 +186,7 @@ clear
 
 
 if [[ "${RUNMODE}" != "scheduled" ]]; then
-echo "                     __________________                                                                     "
-echo "_______________________  /___(_)__  __/____  __      ___________ ____________  _______________________ ___  "
-echo "__  ___/__  __ \  __ \  __/_  /__  /_ __  / / /_______  _ \  __ `/_  ___/_  / / /_  ___/__  __ \_  __ `__ \ "
-echo "_(__  )__  /_/ / /_/ / /_ _  / _  __/ _  /_/ /_/_____/  __/ /_/ /_(__  )_  /_/ /_  /   __  /_/ /  / / / / / "
-echo "/____/ _  .___/\____/\__/ /_/  /_/    _\__, /        \___/\__,_/ /____/ _\__, / /_/    _  .___//_/ /_/ /_/  "
-echo "       /_/                            /____/                            /____/         /_/                  " 
-echo "                                                                                                            "
+f_logo
 sleep 3
 fi
 

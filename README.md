@@ -1,8 +1,5 @@
 # spotify-easyrpm
 
-┌─┐┌─┐┌─┐┌┬┐┬┌─┐┬ ┬   ┌─┐┌─┐┌─┐┬ ┬┬─┐┌─┐┌┬┐
-└─┐├─┘│ │ │ │├┤ └┬┘───├┤ ├─┤└─┐└┬┘├┬┘├─┘│││
-└─┘┴  └─┘ ┴ ┴└   ┴    └─┘┴ ┴└─┘ ┴ ┴└─┴  ┴ ┴
 
 Spotify-EasyRPM is a bash script designed to download the latest debian package from the Spotify repository and convert it into an RPM
 

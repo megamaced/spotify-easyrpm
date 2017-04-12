@@ -424,6 +424,7 @@ fi
 
 if [[ "${RUNMODE}" == "noprompt" ]]; then
  f_installrpm
+ f_createscheduleprompt
 elif [[ "${RUNMODE}" == "scheduled" ]]; then
  f_updatelocalrepo 
 elif [[ "${RUNMODE}" == "prompt" ]]; then

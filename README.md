@@ -22,9 +22,9 @@ Spotify-EasyRPM is a bash script designed to download the latest debian package 
 
  Howto
  
- * Run spotify-easyrpm for the regular prompt mode
- * Run spotify-easyrpm -noprompt to accept the defaults (yes to install, yes to create the schedule)
-
+ * Run `spotify-easyrpm` for the regular prompt mode
+ * Run `spotify-easyrpm -noprompt` to accept the defaults (yes to install, yes to create the schedule)
+ * Run `spotify-easyrpm -remove-schedule` to remove the cron job and local repo
 
  Download links (One Click Install)
 
@@ -35,6 +35,5 @@ Spotify-EasyRPM is a bash script designed to download the latest debian package 
 
  Wishlist
 
- * Add an option to remove the schedule and delete the local filesystem cache
  * Check the Spotify repository for available versions for comparision before attempting to download anything
  * Add support for other non Debian based distributions

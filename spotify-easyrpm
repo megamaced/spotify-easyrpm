@@ -12,11 +12,15 @@
 #  - Set up a monthly cron job
 #  - Set up a local filesystem repo
 #
+# spotify-easyrpm -remove-schedule
+#
+#  - Removes the cron job and local repo
+#
 # spotify-easyrpm -scheduled
 #
 #  - Special mode for the cron job  
 #
-#
+
 
 SCRIPTNAME="spotify-easyrpm"
 USERNAME="$(whoami)"
@@ -134,6 +138,47 @@ if ! createrepo "${LOCALREPO}"; then
 fi
 }
 
+f_createscheduleprompt() {
+if [[ "${RUNMODE}" == "noprompt" ]]; then
+ FREQUENCY="monthly"
+ f_createcron
+elif [[ "${RUNMODE}" == "prompt" ]]; then
+ if [[ ! -f "${CRONFILE}" ]]; then
+  while true
+  do
+   read -rp "Do you wish to set up a cron job and local repo to enable updating Spotify alongside regular system updates (y/n)?" WANTCRON
+
+  case $WANTCRON in
+  y ) ASKFREQUENCY="yes"
+   break;;
+
+  n ) echo "ok" 
+   break;;
+
+  esac
+ done
+ fi
+fi
+if [[ "${ASKFREQUENCY}" == "yes" ]]; then
+  while true
+  do
+   read -rp "How often do you want to check for updates (weekly/monthly)?" FREQUENCYANSWER
+
+  case $FREQUENCYANSWER in
+  weekly ) FREQUENCY="weekly"
+           f_createcron
+   break;;
+
+  monthly ) FREQUENCY="monthly"
+           f_createcron
+   break;;
+
+  esac
+ done
+fi
+}
+
+
 f_logo() {
 cat <<EOF
 
@@ -166,18 +211,23 @@ repository and converts it into an RPM and then installs it for you
   - Set up a monthly cron job
   - Set up a local filesystem repo
 
+ ${SCRIPTNAME} -remove-schedule
+
+  - Removes the cron job and local repo
+ 
 EOF
  exit 0
 fi
 
 if [[ "$1" == "-noprompt" ]]; then
-RUNMODE="defaults"
+RUNMODE="noprompt"
 fi
-
 if [[ "$1" == "-scheduled" ]]; then
 RUNMODE="scheduled"
 fi
-
+if [[ "$1" == "-remove-schedule" ]]; then
+RUNMODE="remove-schedule"
+fi
 if [[ -z "${RUNMODE}" ]]; then
 RUNMODE="prompt"
 fi
@@ -188,6 +238,22 @@ clear
 if [[ "${RUNMODE}" != "scheduled" ]]; then
 f_logo
 sleep 3
+fi
+
+if [[ "${RUNMODE}" == "remove-schedule" ]]; then
+ echo "Removing ${CRONFILE}"
+ if [[ -f "${CRONFILE}" ]]; then
+  sudo rm "${CRONFILE}"
+ fi
+ echo "Removing ${SCRIPTNAME} local repo"
+ if [[ -f /etc/zypp/repos.d/${SCRIPTNAME}.repo ]]; then
+ sudo zypper rr "${SCRIPTNAME}"
+ fi
+ if [[ -d "${LOCALREPO}" ]]; then
+ sudo rm -r "${LOCALREPO}"
+ fi
+ echo "done"
+ exit 0
 fi
 
 f_cleanup
@@ -244,7 +310,8 @@ if [[ "$(rpm -q spotify-client | cut -f3 -d"-")" == "${SPOTIFYVER}" ]]; then
       y ) echo "ok"
       break;;
 
-      n ) f_cleanup
+      n ) f_createscheduleprompt
+          f_cleanup
           echo "bye"
       exit;;
 
@@ -355,7 +422,7 @@ else
 echo "Spotify RPM created in ${RPMSDIR}/${RPMARCH}/"
 fi
 
-if [[ "${RUNMODE}" == "defaults" ]]; then
+if [[ "${RUNMODE}" == "noprompt" ]]; then
  f_installrpm
 elif [[ "${RUNMODE}" == "scheduled" ]]; then
  f_updatelocalrepo 
@@ -365,55 +432,20 @@ elif [[ "${RUNMODE}" == "prompt" ]]; then
    read -rp "Do you wish to install it (y/n)?" INSTALL
 
   case $INSTALL in
-  y ) f_installrpm 
+  y ) f_installrpm
+      f_createscheduleprompt
+      f_cleanup
+      echo "Done"
+      exit 0 
    break;;
 
-  n ) break;;
-
-  esac
- done
-fi
-
-if [[ "${RUNMODE}" == "defaults" ]]; then
- FREQUENCY="monthly"
- f_createcron
-elif [[ "${RUNMODE}" == "prompt" ]]; then
-  while true
-  do
-   read -rp "Do you wish to set up a cron job and local repo to enable updating Spotify alongside regular system updates (y/n)?" WANTCRON
-
-  case $WANTCRON in
-  y ) ASKFREQUENCY="yes"
-   break;;
-
-  n ) echo "ok" 
+  n ) f_createscheduleprompt
+      f_cleanup
+      echo "Done"
+      exit 0 
    break;;
 
   esac
  done
 fi
-
-if [[ "${ASKFREQUENCY}" == "yes" ]]; then
-  while true
-  do
-   read -rp "How often do you want to check for updates (weekly/monthly)?" FREQUENCYANSWER
-
-  case $FREQUENCYANSWER in
-  weekly ) FREQUENCY="weekly"
-           f_createcron
-   break;;
-
-  monthly ) FREQUENCY="monthly"
-           f_createcron
-   break;;
-
-  esac
- done
-
-fi
-
-f_cleanup
-
-echo "Done"
-exit 0
 

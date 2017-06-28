@@ -1,0 +1,576 @@
+#!/bin/bash
+#
+# spotify-easyrpm downloads the latest debian package from the Spotify
+# repository and converts it into an RPM and then offers to install it for you
+#
+# Run without args for the regular question based mode, or with
+#
+# spotify-easyrpm -noprompt
+#
+#  - Install the Spotify RPM
+#  - Cancel if the installed version is the same as the downloaded version
+#  - Set up a monthly cron job
+#  - Set up a local filesystem repo
+#
+# spotify-easyrpm -remove-schedule
+#
+#  - Removes the cron job and local repo
+#
+# spotify-easyrpm -noroot
+#
+#  - In this mode spotify-easyrpm will not require root/sudo
+#  - Limitations:
+#   - Spotify will run from your home folder
+#   - Not compatible with spotify-easyrpm update schedule, local repo or version check features
+#   - Not currently compatible with -noprompt mode   
+#
+# spotify-easyrpm -scheduled
+#
+#  - Special mode for the cron job  
+#
+
+
+## VARIABLES ##
+
+
+SCRIPTNAME="spotify-easyrpm"
+USERNAME="$(whoami)"
+SYSARCH="$(uname -p)"
+SOURCESDIR="${HOME}/rpmbuild/SOURCES"
+SPECSDIR="${HOME}/rpmbuild/SPECS"
+RPMSDIR="${HOME}/rpmbuild/RPMS"
+NOROOTINSTALLDIR="${HOME}/.local/spotify-client"
+NOROOTDESKTOPFILEDIR="${HOME}/.local/share/applications"
+SPOTIFYREPO="http://repository.spotify.com/pool/non-free/s/spotify-client/"
+LOCALREPO="/var/cache/${SCRIPTNAME}"
+CRONFILE="/etc/cron.d/${SCRIPTNAME}"
+
+
+
+## SHARED FUNCTIONS ##
+
+
+f_logo() {
+cat <<EOF
+
+┌─┐┌─┐┌─┐┌┬┐┬┌─┐┬ ┬   ┌─┐┌─┐┌─┐┬ ┬┬─┐┌─┐┌┬┐
+└─┐├─┘│ │ │ │├┤ └┬┘───├┤ ├─┤└─┐└┬┘├┬┘├─┘│││
+└─┘┴  └─┘ ┴ ┴└   ┴    └─┘┴ ┴└─┘ ┴ ┴└─┴  ┴ ┴
+
+EOF
+}
+
+f_help() {
+if [[ "$1" == "-h" ]] || [[ "$1" == "--help" ]]; then
+f_logo
+cat <<EOF
+
+${SCRIPTNAME} downloads the latest debian package from the Spotify
+repository and converts it into an RPM and then installs it for you
+
+ Run without args for the regular question based mode, or with
+
+ ${SCRIPTNAME} -noprompt
+
+  - Install the Spotify RPM
+  - Cancel if the installed version is the same as the downloaded version
+  - Set up a monthly cron job
+  - Set up a local filesystem repo
+
+ ${SCRIPTNAME} -remove-schedule
+
+  - Removes the cron job and local repo
+
+ ${SCRIPTNAME} -noroot
+
+  - In this mode spotify-easyrpm will not require root/sudo
+  - Limitations:
+   - Spotify will run from your home folder
+   - Not compatible with spotify-easyrpm update schedule, local repo or version check features
+   - Not currently compatible with -noprompt mode
+
+ 
+EOF
+ exit 0
+fi
+}
+
+f_error() {
+echo "$1" 1>&2
+f_cleanup
+exit 1
+}
+
+f_cleanup() {
+echo "Cleaning up"
+rm "${SOURCESDIR}"/index.html > /dev/null 2>&1
+rm "${SOURCESDIR}"/data.tar.gz > /dev/null 2>&1
+rm -r "${SOURCESDIR:?}"/usr > /dev/null 2>&1
+rm -r "${SOURCESDIR}"/spotify-client* > /dev/null 2>&1
+}
+
+f_root_check() {
+if [[ "$(id -u)" == "0" ]]; then
+ f_error "Do not run as root"
+fi
+}
+
+f_arch_check() {
+if [[ "${SYSARCH}" == i686 ]]; then
+ DEBARCH=i386
+ RPMARCH=i586
+elif [[ "${SYSARCH}" == x86_64 ]]; then
+ DEBARCH=amd64
+ RPMARCH=x86_64
+else
+ f_error "Unsupported architecture. Aborting"
+fi
+}
+
+f_mode_check() {
+if [[ "$1" == "-noprompt" ]]; then
+RUNMODE="noprompt"
+fi
+if [[ "$1" == "-scheduled" ]]; then
+RUNMODE="scheduled"
+fi
+if [[ "$1" == "-remove-schedule" ]]; then
+RUNMODE="remove-schedule"
+fi
+if [[ "$1" == "-noroot" ]]; then
+RUNMODE="noroot"
+fi
+if [[ -z "${RUNMODE}" ]]; then
+RUNMODE="prompt"
+fi
+}
+
+f_spotify_download() {
+echo "Downloading latest Spotify debs"
+if ! wget -e robots=off --no-directories --recursive --no-parent -P "${SOURCESDIR}"/ "${SPOTIFYREPO}" -A spotify-client*"${DEBARCH}".deb; then
+f_error "Failed to download Spotify. Aborting"
+fi
+echo "Checking if we downloaded multiple versions"
+if [[ "$(find "${SOURCESDIR}" -name spotify-client*.deb | wc -l)" -gt 1 ]]; then
+ echo "Removing the older downloaded versions"
+ find "${SOURCESDIR}" -name spotify-client*.deb | sort | sed \$d | xargs -d '\n' rm
+fi
+}
+
+f_spotify_ver() {
+SPOTIFYVER="$(find "${SOURCESDIR}"/ -name spotify-client*.deb | cut -f2 -d"_" | cut -f1 -d"-")"
+}
+
+f_create_rpmbuild_dir() {
+echo "Creating rpmbuild dirs in ${HOME}/rpmbuild"
+if ! mkdir -p "${HOME}"/rpmbuild/{BUILD,BUILDROOT,OTHER,RPMS,SOURCES,SPECS,SRPMS}; then
+f_error "Failed to create rpmbuild root. Aborting"
+fi
+echo "Creating .rpmmacros if it doesn't exist"
+if [[ ! -f "${HOME}"/.rpmmacros ]]; then
+ cat << EOF >> "${HOME}"/.rpmmacros
+%_topdir /home/${USERNAME}/rpmbuild
+EOF
+fi
+}
+
+f_extract_deb() {
+echo "Extracting deb and preparing"
+ar -x "${SOURCESDIR}"/spotify-client*"${DEBARCH}".deb || f_error "Failed to extract deb"
+rm control.tar.gz debian-binary
+mv data.tar.gz "${SOURCESDIR}"/
+tar xzf "${SOURCESDIR}"/data.tar.gz -C "${SOURCESDIR}"/
+mkdir -p "${SOURCESDIR}"/spotify-client
+mv "${SOURCESDIR}"/usr "${SOURCESDIR}"/spotify-client/
+}
+
+
+
+## REGULAR ROOT BUILD / INSTALL MODE FUNCTIONS ##
+
+
+f_rpmbuild_deps() {
+if ! rpm -q rpm-build > /dev/null 2>&1; then
+ echo "Installing build dependencies (rpm-build)"
+ if ! sudo zypper --non-interactive in rpm-build; then
+ f_error "Failed to install build dependencies. Aborting"
+ fi
+fi
+if ! rpm -q update-desktop-files > /dev/null 2>&1; then
+ echo "Installing build dependencies (update-desktop-files)"
+ if ! sudo zypper --non-interactive in update-desktop-files; then
+ f_error "Failed to install build dependencies. Aborting"
+ fi
+fi
+}
+
+f_prepare_rpm_src() {
+echo "Preparing RPM src tarball"
+mkdir -p "${SOURCESDIR}"/spotify-client/usr/share/applications
+f_desktop_entry
+f_spotify_ver
+tar czf "${SOURCESDIR}"/spotify-client-"${SPOTIFYVER}".tar.gz -C "${SOURCESDIR}"/ spotify-client
+}
+
+f_desktop_entry() {
+cat << EOF >> "${SOURCESDIR}"/spotify-client/usr/share/applications/spotify.desktop
+[Desktop Entry]
+Name=Spotify
+GenericName=Music Player
+Comment=Spotify streaming music client
+Icon=/usr/share/spotify/icons/spotify-linux-64.png
+Exec=spotify %U
+TryExec=spotify
+Terminal=false
+Type=Application
+Categories=Audio;Music;Player;AudioVideo;
+MimeType=x-scheme-handler/spotify;
+EOF
+}
+
+f_rpm_ver_compare() {
+echo "Comparing downloaded version to installed version (if any)"
+f_spotify_ver
+if [[ "$(rpm -q spotify-client | cut -f3 -d"-")" == "${SPOTIFYVER}" ]]; then
+ if [[ "${RUNMODE}" != "prompt" ]]; then
+  f_cleanup
+  exit 0
+ else
+ while true
+  do
+   read -rp "You have downloaded version ${SPOTIFYVER} which is already installed. Continue? (y/n)" CONTINUE
+    case $CONTINUE in
+ 
+      y ) echo "ok"
+      break;;
+
+      n ) f_create_schedule_prompt
+          f_cleanup
+          echo "bye"
+      exit;;
+
+   esac
+ done
+ fi
+fi
+}
+
+f_rpm_spec_bak() {
+echo "Backing up previous build file (if any)"
+if [[ -f "${SPECSDIR}"/spotify.spec ]]; then
+ mv "${SPECSDIR}"/spotify.spec "${SPECSDIR}"/spotify.spec.old
+fi
+}
+
+f_rpm_spec() {
+echo "Writing new build file"
+
+cat << EOF >> "${SPECSDIR}"/spotify.spec
+#
+# spec file for package spotify-client
+#
+# Copyright (c) 2015 SUSE LINUX Products GmbH, Nuernberg, Germany.
+#
+# All modifications and additions to the file contributed by third parties
+# remain the property of their copyright owners, unless otherwise agreed
+# upon. The license for this file, and modifications and additions to the
+# file, is the same license as for the pristine package itself (unless the
+# license for the pristine package is not an Open Source License, in which
+# case the license is the MIT License). An "Open Source License" is a
+# license that conforms to the Open Source Definition (Version 1.9)
+# published by the Open Source Initiative.
+
+# Please submit bugfixes or comments via http://bugs.opensuse.org/
+#
+
+Name:   spotify-client
+Version:  ${SPOTIFYVER}
+Release:  0
+License:  https://www.spotify.com/legal/end-user-agreement
+Summary:  Spotify streaming music client
+Vendor:   Spotify AB
+Url:    https://www.spotify.com
+Source:   %{name}-%{version}.tar.gz
+BuildRoot:  %{_tmppath}/%{name}-%{version}-build
+BuildRequires:  update-desktop-files
+Requires: libasound2
+Requires: libcurl4
+Requires: gconf2
+Requires: libgtk-2_0-0
+Requires: libglib-2_0-0
+Requires: libgcrypt20
+Requires: mozilla-nss
+Requires: libudev1
+Requires: libX11-6
+Requires: libXtst6
+Requires: libopenssl1_0_0
+Recommends: libavcodec56
+Recommends: libavformat56
+Recommends: zenity
+Suggests: libnotify4
+AutoReq:  no
+
+%description
+The Spotify desktop client unofficially supports Linux, meaning that there is a
+native client for Linux but we do not offer official support for client-related
+problems on this platform. If you are having severe problems with the native
+Linux client, there are a few alternatives that you can try:
+
+- Using the web player: https://play.spotify.com (requires Adobe Flash plugin)
+- Running the native Windows client in Wine (not recommended, but should work)
+
+Otherwise, the native Linux client is the recommended way to listen to Spotify
+on Linux systems.
+
+%prep
+%setup -q -n %{name} 
+
+%install
+mkdir -p %{buildroot}/usr
+cp -r usr %{buildroot}/
+
+%post
+
+%desktop_database_post
+
+%postun
+
+%desktop_database_postun
+
+%clean
+
+%files
+%defattr(-,root,root)
+#%doc ChangeLog README COPYING
+%dir /usr/share/spotify
+/usr/share/spotify/*
+/usr/bin/spotify
+/usr/share/doc/spotify-client/*
+/usr/share/applications/spotify.desktop
+EOF
+}
+
+f_run_rpmbuild() {
+echo "Running rpm build"
+if ! rpmbuild -bb --quiet --clean "${SPECSDIR}"/spotify.spec; then
+f_error "Spotify RPM failed to build. Aborting"
+else
+echo "Spotify RPM created in ${RPMSDIR}/${RPMARCH}/"
+fi
+}
+
+f_install_rpm_prompt() {
+ while true
+  do
+   read -rp "Do you wish to install the Spotify RPM (y/n)?" INSTALL
+
+  case $INSTALL in
+  y ) f_install_rpm
+      f_create_schedule_prompt
+      f_cleanup
+      echo "Done"
+      exit 0 
+   break;;
+
+  n ) f_create_schedule_prompt
+      f_cleanup
+      echo "Done"
+      exit 0 
+   break;;
+
+  esac
+ done
+}
+
+f_install_rpm() {
+sudo zypper --non-interactive --no-gpg-check in "${RPMSDIR}"/"${RPMARCH}"/spotify-client-"${SPOTIFYVER}"*"${RPMARCH}".rpm
+}
+
+
+## SCHEDULE MODE FUNCTIONS ##
+
+
+f_create_schedule_prompt() {
+if [[ "${RUNMODE}" == "noprompt" ]]; then
+ FREQUENCY="monthly"
+ f_create_cron
+elif [[ "${RUNMODE}" == "prompt" ]]; then
+ if [[ ! -f "${CRONFILE}" ]]; then
+  while true
+  do
+   read -rp "Do you wish to set up a cron job and local repo to enable updating Spotify alongside regular system updates (y/n)?" WANTCRON
+
+  case $WANTCRON in
+  y ) ASKFREQUENCY="yes"
+   break;;
+
+  n ) echo "ok" 
+   break;;
+
+  esac
+ done
+ fi
+fi
+if [[ "${ASKFREQUENCY}" == "yes" ]]; then
+  while true
+  do
+   read -rp "How often do you want to check for updates (weekly/monthly)?" FREQUENCYANSWER
+
+  case $FREQUENCYANSWER in
+  weekly ) FREQUENCY="weekly"
+           f_create_cron
+   break;;
+
+  monthly ) FREQUENCY="monthly"
+           f_create_cron
+   break;;
+
+  esac
+ done
+fi
+}
+
+f_create_cron() {
+if [[ ! -f /usr/bin/"${SCRIPTNAME}" ]]; then
+ f_error "Please move ${SCRIPTNAME} to /usr/bin"
+fi
+if ! rpm -q createrepo > /dev/null 2>&1; then
+ echo "Installing CreateRepo for local filesystem repo"
+ if ! sudo zypper --non-interactive in createrepo; then
+ f_error "Failed to install createrepo. Aborting"
+ fi
+fi
+if [[ ! -d "${LOCALREPO}" ]]; then
+ echo "Creating local filesystem repo at ${LOCALREPO}"
+ if ! sudo mkdir -p ${LOCALREPO}; then
+  f_error "Failed to create local filesystem repo at ${LOCALREPO}. Aborting"
+ fi
+fi
+if ! sudo find ${LOCALREPO} -type d -exec chmod 777 {} \+; then
+ f_error "Failed to chmod ${LOCALREPO}"
+fi
+if ! sudo find ${LOCALREPO} -type f -exec chmod 666 {} \+; then
+ f_error "Failed to chmod ${LOCALREPO}"
+fi
+f_update_local_repo
+if [[ ! -f /etc/zypp/repos.d/${SCRIPTNAME}.repo ]]; then
+ echo "Adding local file system repository to zypper"
+ if ! sudo zypper ar -G --refresh "${LOCALREPO}" "${SCRIPTNAME}"; then
+  f_error "Failed to add local repo to zypper. Aborting" 
+ fi
+fi
+if [[ ! -f "${CRONFILE}" ]]; then
+ echo "Creating cron job in ${CRONFILE}"
+ cat <<EOF | sudo tee "${CRONFILE}"
+@${FREQUENCY} $(whoami) /usr/bin/${SCRIPTNAME} -scheduled
+EOF
+fi
+}
+
+f_update_local_repo() {
+echo "Moving RPMs from your rpmbuild ${RPMSDIR} to your local repo ${LOCALREPO}"
+find "${RPMSDIR}"/"${RPMARCH}"/ -name spotify-client-*"${RPMARCH}".rpm -type f -exec mv -t "${LOCALREPO}" {} \+
+if ! createrepo "${LOCALREPO}"; then
+ f_error "Failed to create local repo. Aborting"
+fi
+}
+
+
+f_remove_schedule() {
+echo "Removing ${CRONFILE}"
+ if [[ -f "${CRONFILE}" ]]; then
+  sudo rm "${CRONFILE}"
+ fi
+ echo "Removing ${SCRIPTNAME} local repo"
+ if [[ -f /etc/zypp/repos.d/${SCRIPTNAME}.repo ]]; then
+ sudo zypper rr "${SCRIPTNAME}"
+ fi
+ if [[ -d "${LOCALREPO}" ]]; then
+ sudo rm -r "${LOCALREPO}"
+ fi
+ echo "done"
+ exit 0
+}
+
+
+## NO ROOT MODE FUNCTIONS ##
+
+
+f_desktop_entry_noroot() {
+cat << EOF >> "${NOROOTDESKTOPFILEDIR}"/spotify.desktop
+[Desktop Entry]
+Name=Spotify
+GenericName=Music Player
+Comment=Spotify streaming music client
+Icon="${NOROOTINSTALLDIR}"/icons/spotify-linux-64.png
+Exec=spotify %U
+TryExec="${NOROOTINSTALLDIR}"/spotify
+Terminal=false
+Type=Application
+Categories=Audio;Music;Player;AudioVideo;
+MimeType=x-scheme-handler/spotify;
+EOF
+}
+
+
+## MAIN PROCESS FUNCTION ##
+
+
+f_main() {
+clear
+if [[ "${RUNMODE}" == "noprompt" ]]; then
+ f_logo
+ f_rpmbuild_deps
+ f_create_rpmbuild_dir
+ f_spotify_download
+ f_rpm_ver_compare
+ f_extract_deb
+ f_prepare_rpm_src
+ f_rpm_spec_bak
+ f_rpm_spec
+ f_run_rpmbuild
+ f_install_rpm
+ f_create_schedule_prompt
+elif [[ "${RUNMODE}" == "prompt" ]]; then
+ f_logo
+ f_rpmbuild_deps
+ f_create_rpmbuild_dir
+ f_spotify_download
+ f_rpm_ver_compare
+ f_extract_deb
+ f_prepare_rpm_src
+ f_rpm_spec_bak
+ f_rpm_spec
+ f_run_rpmbuild
+ f_install_rpm_prompt
+ f_create_schedule_prompt
+elif [[ "${RUNMODE}" == "scheduled" ]]; then
+ f_spotify_download
+ f_rpm_ver_compare
+ f_extract_deb
+ f_prepare_rpm_src
+ f_rpm_spec_bak
+ f_rpm_spec
+ f_run_rpmbuild
+ f_update_local_repo
+elif [[ "${RUNMODE}" == "remove-schedule" ]]; then
+ f_logo
+ f_remove_schedule
+elif [[ "${RUNMODE}" == "noroot" ]]; then
+ f_logo
+ f_create_rpmbuild_dir
+ f_spotify_download
+ f_extract_deb
+fi
+}
+
+### EXECUTION BEGINS ###
+
+f_help
+f_arch_check
+f_root_check
+f_mode_check
+f_cleanup
+f_main
+
+

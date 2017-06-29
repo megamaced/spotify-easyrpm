@@ -34,17 +34,19 @@
 
 
 SCRIPTNAME="spotify-easyrpm"
-USERNAME="$(whoami)"
 SYSARCH="$(uname -p)"
+
+SPOTIFYREPO="http://repository.spotify.com/pool/non-free/s/spotify-client/"
+
 SOURCESDIR="${HOME}/rpmbuild/SOURCES"
 SPECSDIR="${HOME}/rpmbuild/SPECS"
 RPMSDIR="${HOME}/rpmbuild/RPMS"
+
+CRONFILE="${HOME}/${SCRIPTNAME}.tmp"
+LOCALREPO="/var/cache/${SCRIPTNAME}"
+
 NOROOTINSTALLDIR="${HOME}/.local/spotify-client"
 NOROOTDESKTOPFILEDIR="${HOME}/.local/share/applications"
-SPOTIFYREPO="http://repository.spotify.com/pool/non-free/s/spotify-client/"
-LOCALREPO="/var/cache/${SCRIPTNAME}"
-CRONFILE="/etc/cron.d/${SCRIPTNAME}"
-
 
 
 ## SHARED FUNCTIONS ##
@@ -107,6 +109,7 @@ rm "${SOURCESDIR}"/index.html > /dev/null 2>&1
 rm "${SOURCESDIR}"/data.tar.gz > /dev/null 2>&1
 rm -r "${SOURCESDIR:?}"/usr > /dev/null 2>&1
 rm -r "${SOURCESDIR}"/spotify-client* > /dev/null 2>&1
+echo "done"
 }
 
 f_root_check() {
@@ -128,20 +131,16 @@ fi
 }
 
 f_mode_check() {
-if [[ "$1" == "-noprompt" ]]; then
-RUNMODE="noprompt"
-fi
-if [[ "$1" == "-scheduled" ]]; then
-RUNMODE="scheduled"
-fi
-if [[ "$1" == "-remove-schedule" ]]; then
-RUNMODE="remove-schedule"
-fi
-if [[ "$1" == "-noroot" ]]; then
-RUNMODE="noroot"
-fi
 if [[ -z "${RUNMODE}" ]]; then
 RUNMODE="prompt"
+elif [[ "$1" == "-noprompt" ]]; then
+RUNMODE="noprompt"
+elif [[ "$1" == "-scheduled" ]]; then
+RUNMODE="scheduled"
+elif [[ "$1" == "-noroot" ]]; then
+RUNMODE="noroot"
+elif [[ "$1" == "-remove-schedule" ]]; then
+RUNMODE="remove-schedule"
 fi
 }
 
@@ -184,6 +183,11 @@ mkdir -p "${SOURCESDIR}"/spotify-client
 mv "${SOURCESDIR}"/usr "${SOURCESDIR}"/spotify-client/
 }
 
+f_script_location_check() {
+if [[ ! -f /usr/bin/"${SCRIPTNAME}" ]]; then
+ f_error "Please move ${SCRIPTNAME} to /usr/bin"
+fi
+}
 
 
 ## REGULAR ROOT BUILD / INSTALL MODE FUNCTIONS ##
@@ -360,51 +364,51 @@ fi
 }
 
 f_install_rpm_prompt() {
+if [[ "${RUNMODE}" != "prompt" ]]; then
+  f_install_rpm
+else 
  while true
   do
    read -rp "Do you wish to install the Spotify RPM (y/n)?" INSTALL
 
   case $INSTALL in
   y ) f_install_rpm
-      f_create_schedule_prompt
-      f_cleanup
-      echo "Done"
-      exit 0 
    break;;
 
-  n ) f_create_schedule_prompt
-      f_cleanup
-      echo "Done"
-      exit 0 
+  n ) echo "OK not installing now" 
    break;;
 
   esac
  done
+fi
 }
 
 f_install_rpm() {
-sudo zypper --non-interactive --no-gpg-check in "${RPMSDIR}"/"${RPMARCH}"/spotify-client-"${SPOTIFYVER}"*"${RPMARCH}".rpm
+echo "Installing spotify-client-${SPOTIFYVER}"
+if ! sudo zypper --non-interactive --no-gpg-check in "${RPMSDIR}"/"${RPMARCH}"/spotify-client-"${SPOTIFYVER}"*"${RPMARCH}".rpm; then
+  f_error "Failed to install spotify-client-${SPOTIFYVER}"
+fi
 }
 
 
-## SCHEDULE MODE FUNCTIONS ##
+## SCHEDULE / REPO MODE FUNCTIONS ##
 
 
 f_create_schedule_prompt() {
-if [[ "${RUNMODE}" == "noprompt" ]]; then
+if [[ "${RUNMODE}" != "prompt" ]]; then
  FREQUENCY="monthly"
- f_create_cron
-elif [[ "${RUNMODE}" == "prompt" ]]; then
+ f_create_schedule
+else
  if [[ ! -f "${CRONFILE}" ]]; then
   while true
   do
-   read -rp "Do you wish to set up a cron job and local repo to enable updating Spotify alongside regular system updates (y/n)?" WANTCRON
+   read -rp "Do you wish to set up an automated cron job and local repo to enable updating Spotify alongside regular system updates (y/n)?" WANTCRON
 
   case $WANTCRON in
   y ) ASKFREQUENCY="yes"
    break;;
 
-  n ) echo "ok" 
+  n ) echo "Ok skipping" 
    break;;
 
   esac
@@ -418,11 +422,11 @@ if [[ "${ASKFREQUENCY}" == "yes" ]]; then
 
   case $FREQUENCYANSWER in
   weekly ) FREQUENCY="weekly"
-           f_create_cron
+           f_create_schedule
    break;;
 
   monthly ) FREQUENCY="monthly"
-           f_create_cron
+           f_create_schedule
    break;;
 
   esac
@@ -430,10 +434,8 @@ if [[ "${ASKFREQUENCY}" == "yes" ]]; then
 fi
 }
 
-f_create_cron() {
-if [[ ! -f /usr/bin/"${SCRIPTNAME}" ]]; then
- f_error "Please move ${SCRIPTNAME} to /usr/bin"
-fi
+f_create_schedule() {
+f_script_location_check
 if ! rpm -q createrepo > /dev/null 2>&1; then
  echo "Installing CreateRepo for local filesystem repo"
  if ! sudo zypper --non-interactive in createrepo; then
@@ -459,12 +461,7 @@ if [[ ! -f /etc/zypp/repos.d/${SCRIPTNAME}.repo ]]; then
   f_error "Failed to add local repo to zypper. Aborting" 
  fi
 fi
-if [[ ! -f "${CRONFILE}" ]]; then
- echo "Creating cron job in ${CRONFILE}"
- cat <<EOF | sudo tee "${CRONFILE}"
-@${FREQUENCY} $(whoami) /usr/bin/${SCRIPTNAME} -scheduled
-EOF
-fi
+f_create_crontab
 }
 
 f_update_local_repo() {
@@ -475,21 +472,46 @@ if ! createrepo "${LOCALREPO}"; then
 fi
 }
 
+f_create_crontab() {
+if ! crontab -l | grep "${SCRIPTNAME}"; then
+ echo "Creating cron job in your crontab"
+ crontab -l > "${CRONFILE}"
+ cat << EOF >> "${CRONFILE}"
+@${FREQUENCY} /usr/bin/${SCRIPTNAME} -scheduled
+EOF
+if crontab "${CRONFILE}"; then
+  rm "${CRONFILE}"
+else
+  rm "${CRONFILE}"
+  f_error "Failed to create cron job in your crontab"
+fi
+# Remove legacy cronfile if present
+if [[ -f /etc/cron.d/"${SCRIPTNAME}" ]]; then
+  echo "Removing legacy cronfile at /etc/cron.d/${SCRIPTNAME}"
+  sudo rm /etc/cron.d/"${SCRIPTNAME}"
+fi
+}
 
 f_remove_schedule() {
-echo "Removing ${CRONFILE}"
- if [[ -f "${CRONFILE}" ]]; then
-  sudo rm "${CRONFILE}"
+ if crontab -l | grep "${SCRIPTNAME}"; then
+  echo "Removing ${SCRIPTNAME} from your crontab"
+  crontab -l | grep -v "${SCRIPTNAME}" > "${CRONFILE}"
+  crontab "${CRONFILE}"
+  rm "${CRONFILE}"
  fi
- echo "Removing ${SCRIPTNAME} local repo"
  if [[ -f /etc/zypp/repos.d/${SCRIPTNAME}.repo ]]; then
- sudo zypper rr "${SCRIPTNAME}"
+  echo "Removing ${SCRIPTNAME} zypper repo"
+  sudo zypper rr "${SCRIPTNAME}"
  fi
  if [[ -d "${LOCALREPO}" ]]; then
- sudo rm -r "${LOCALREPO}"
+  echo "Removing ${SCRIPTNAME} repo from filesystem"
+  sudo rm -r "${LOCALREPO}"
  fi
- echo "done"
- exit 0
+ # Remove legacy cronfile if present
+if [[ -f /etc/cron.d/"${SCRIPTNAME}" ]]; then
+  echo "Removing legacy cronfile at /etc/cron.d/${SCRIPTNAME}"
+  sudo rm /etc/cron.d/"${SCRIPTNAME}"
+fi
 }
 
 
@@ -512,26 +534,17 @@ MimeType=x-scheme-handler/spotify;
 EOF
 }
 
+f_install_homedir() {
+  
+}
+
 
 ## MAIN PROCESS FUNCTION ##
 
 
 f_main() {
 clear
-if [[ "${RUNMODE}" == "noprompt" ]]; then
- f_logo
- f_rpmbuild_deps
- f_create_rpmbuild_dir
- f_spotify_download
- f_rpm_ver_compare
- f_extract_deb
- f_prepare_rpm_src
- f_rpm_spec_bak
- f_rpm_spec
- f_run_rpmbuild
- f_install_rpm
- f_create_schedule_prompt
-elif [[ "${RUNMODE}" == "prompt" ]]; then
+if [[ "${RUNMODE}" == "*prompt" ]]; then
  f_logo
  f_rpmbuild_deps
  f_create_rpmbuild_dir
@@ -553,24 +566,23 @@ elif [[ "${RUNMODE}" == "scheduled" ]]; then
  f_rpm_spec
  f_run_rpmbuild
  f_update_local_repo
-elif [[ "${RUNMODE}" == "remove-schedule" ]]; then
- f_logo
- f_remove_schedule
 elif [[ "${RUNMODE}" == "noroot" ]]; then
  f_logo
  f_create_rpmbuild_dir
  f_spotify_download
  f_extract_deb
+elif [[ "${RUNMODE}" == "remove-schedule" ]]; then
+ f_logo
+ f_remove_schedule
 fi
 }
 
 ### EXECUTION BEGINS ###
 
 f_help
-f_arch_check
 f_root_check
+f_arch_check
 f_mode_check
 f_cleanup
 f_main
-
-
+f_cleanup

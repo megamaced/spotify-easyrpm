@@ -10,9 +10,22 @@ Spotify-EasyRPM is a bash script designed to download the latest debian package 
  * Auto download the latest version of Spotify
  * Convert the debian package to RPM format
  * Install the Spotify RPM
- * Set up a weekly or monthly automated cron job
- * Create a local filesystem repo so Spotify can be updated alongside regular updates
- * Fully unattended mode
+ * Set up a weekly or monthly automated updated schedule via cron job (optional)
+ * Create a local filesystem repo so Spotify can be updated alongside regular updates (optional)
+ * Fully unattended mode (optional)
+
+
+ Coming Soon (v0.7)!
+
+ * Non Root mode - Do not require your sudo/su password. Spotify will install to your homedir. In this mode Spotify can still be automatically updated if desired!
+ * Big code cleanup and reorg 
+
+
+ Coming Soon (v0.8)!
+
+ * Create a schedule switch - If you already have a generated spotify rpm installed but chose 'No' when prompted to create the schedule previously
+ * Use a local copy of a Spotify deb - Useful if you want to stick to a specific Spotify version (perhaps pre v1.0.x)
+ 
 
  Requirements
 
@@ -37,3 +50,4 @@ Spotify-EasyRPM is a bash script designed to download the latest debian package 
 
  * Check the Spotify repository for available versions for comparision before attempting to download anything
  * Add support for other non Debian based distributions
+

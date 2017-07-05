@@ -1,37 +1,36 @@
 #!/bin/bash
 #
-# spotify-easyrpm downloads the latest debian package from the Spotify
-# repository and converts it into an RPM and then offers to install it for you
+#${SCRIPTNAME} is a script which can download the latest debian package from the Spotify
+#repository and convert it into an RPM. It is also capable of installing, scheduling and storing
+#the RPMs in a local filesystem repo for installing Spotify updates alongside regular system updates
 #
-# Run without args for the regular question based mode, or with
+# ${SCRIPTNAME}
 #
-# spotify-easyrpm -noprompt
+#  - Regular prompt based mode to create an RPM and optionally install and create an update schedule
 #
+# ${SCRIPTNAME} -noprompt
+#
+#  - Create the RPM
 #  - Install the Spotify RPM
-#  - Cancel if the installed version is the same as the downloaded version
-#  - Set up a monthly cron job
+#  - Set up a monthly scheduled update job
 #  - Set up a local filesystem repo
 #
-# spotify-easyrpm -remove-schedule
-#
-#  - Removes the cron job and local repo
-#
-# spotify-easyrpm -noroot
+# ${SCRIPTNAME} -noroot
 #
 #  - In this mode spotify-easyrpm will not require root/sudo
-#  - Limitations:
-#   - Spotify will run from your home folder
-#   - Not compatible with spotify-easyrpm update schedule, local repo or version check features
-#   - Not currently compatible with -noprompt mode   
+#  - Spotify will run from your home folder
+#  - Schedule automatic updates (optional)
+#  - Not currently compatible with -noprompt mode
 #
-# spotify-easyrpm -scheduled
+# ${SCRIPTNAME} -remove-schedule
 #
-#  - Special mode for the cron job  
-#
+#  - Removes the cron job and local repo
 
+set -x
 
 ## VARIABLES ##
 
+OPTIONS="${1}"
 
 SCRIPTNAME="spotify-easyrpm"
 SYSARCH="$(uname -p)"
@@ -63,33 +62,35 @@ EOF
 }
 
 f_help() {
-if [[ "$1" == "-h" ]] || [[ "$1" == "--help" ]]; then
+if [[ "${OPTIONS}" == "-h" ]] || [[ "${OPTIONS}" == "--help" ]]; then
 f_logo
 cat <<EOF
 
-${SCRIPTNAME} downloads the latest debian package from the Spotify
-repository and converts it into an RPM and then installs it for you
+${SCRIPTNAME} is a script which can download the latest debian package from the Spotify
+repository and convert it into an RPM. It is also capable of installing, scheduling and storing
+the RPMs in a local filesystem repo for installing Spotify updates alongside regular system updates
 
- Run without args for the regular question based mode, or with
+ ${SCRIPTNAME}
+
+  - Regular prompt based mode to create an RPM and optionally install and create an update schedule
 
  ${SCRIPTNAME} -noprompt
 
+  - Create the RPM
   - Install the Spotify RPM
-  - Cancel if the installed version is the same as the downloaded version
-  - Set up a monthly cron job
+  - Set up a monthly scheduled update job
   - Set up a local filesystem repo
-
- ${SCRIPTNAME} -remove-schedule
-
-  - Removes the cron job and local repo
 
  ${SCRIPTNAME} -noroot
 
   - In this mode spotify-easyrpm will not require root/sudo
-  - Limitations:
-   - Spotify will run from your home folder
-   - Not compatible with spotify-easyrpm update schedule, local repo or version check features
-   - Not currently compatible with -noprompt mode
+  - Spotify will run from your home folder
+  - Schedule automatic updates (optional)
+  - Not currently compatible with -noprompt mode
+
+ ${SCRIPTNAME} -remove-schedule
+
+  - Removes the cron job and local repo
 
  
 EOF
@@ -131,9 +132,7 @@ fi
 }
 
 f_mode_check() {
-if [[ -z "${RUNMODE}" ]]; then
-RUNMODE="prompt"
-elif [[ "$1" == "-noprompt" ]]; then
+if [[ "$1" == "-noprompt" ]]; then
 RUNMODE="noprompt"
 elif [[ "$1" == "-scheduled" ]]; then
 RUNMODE="scheduled"
@@ -141,7 +140,26 @@ elif [[ "$1" == "-noroot" ]]; then
 RUNMODE="noroot"
 elif [[ "$1" == "-remove-schedule" ]]; then
 RUNMODE="remove-schedule"
+elif [[ -z "$1" ]]; then
+RUNMODE="prompt"
 fi
+}
+
+
+f_config() {
+  if [ -f "${HOME}"/."${SCRIPTNAME}" ]; then
+    source "${HOME}"/."${SCRIPTNAME}"
+  else
+    cat << EOF >> "${HOME}"/."${SCRIPTNAME}"
+
+# PREFS
+PROMPT_SCHEDULE=
+
+# NO ROOT CONFIG
+SPOTIFY_VER_NOROOT=
+
+EOF
+    fi
 }
 
 f_spotify_download() {
@@ -399,28 +417,29 @@ if [[ "${RUNMODE}" != "prompt" ]]; then
  FREQUENCY="monthly"
  f_create_schedule
 else
- if [[ ! -f "${CRONFILE}" ]]; then
+ if ! crontab -l | grep "${SCRIPTNAME}"; then # Add here && [[ "${PROMPT_SCHEDULE}" != "no" ]] in v0.8
   while true
   do
-   read -rp "Do you wish to set up an automated cron job and local repo to enable updating Spotify alongside regular system updates (y/n)?" WANTCRON
+   read -rp "Do you wish to set up an automated cron job and local repo to enable updating Spotify alongside regular system updates (y/n)?" SCHEDULE_ANSWER
 
-  case $WANTCRON in
-  y ) ASKFREQUENCY="yes"
+  case $SCHEDULE_ANSWER in
+  y ) ASK_FREQUENCY="yes"
    break;;
 
-  n ) echo "Ok skipping" 
+  n ) echo "Ok skipping..."
+      # add here skip preference to config file
    break;;
 
   esac
  done
  fi
 fi
-if [[ "${ASKFREQUENCY}" == "yes" ]]; then
+if [[ "${ASK_FREQUENCY}" == "yes" ]]; then
   while true
   do
-   read -rp "How often do you want to check for updates (weekly/monthly)?" FREQUENCYANSWER
+   read -rp "How often do you want to check for updates (weekly/monthly)?" FREQUENCY_ANSWER
 
-  case $FREQUENCYANSWER in
+  case $FREQUENCY_ANSWER in
   weekly ) FREQUENCY="weekly"
            f_create_schedule
    break;;
@@ -479,6 +498,7 @@ if ! crontab -l | grep "${SCRIPTNAME}"; then
  cat << EOF >> "${CRONFILE}"
 @${FREQUENCY} /usr/bin/${SCRIPTNAME} -scheduled
 EOF
+fi
 if crontab "${CRONFILE}"; then
   rm "${CRONFILE}"
 else
@@ -534,9 +554,9 @@ MimeType=x-scheme-handler/spotify;
 EOF
 }
 
-f_install_homedir() {
-  
-}
+#f_install_homedir() {
+#  
+#}
 
 
 ## MAIN PROCESS FUNCTION ##
@@ -544,7 +564,7 @@ f_install_homedir() {
 
 f_main() {
 clear
-if [[ "${RUNMODE}" == "*prompt" ]]; then
+if [[ "${RUNMODE}" == "prompt" ]]; then
  f_logo
  f_rpmbuild_deps
  f_create_rpmbuild_dir
@@ -584,5 +604,6 @@ f_root_check
 f_arch_check
 f_mode_check
 f_cleanup
+f_config
 f_main
 f_cleanup

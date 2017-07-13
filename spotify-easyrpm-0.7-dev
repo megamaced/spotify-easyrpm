@@ -24,8 +24,9 @@
 #
 # ${V_SCRIPT_NAME} -remove-schedule
 #
-#  - Removes the cron job and local repo
+#  - Removes the schedule and local repo if present
 
+#set -x
 
 ## VARIABLES ##
 
@@ -33,6 +34,8 @@
 V_OPTIONS="${1}"
 
 V_SCRIPT_NAME="spotify-easyrpm"
+V_CONFIG_FILE="${HOME}/.${V_SCRIPT_NAME}"
+
 V_SYS_ARCH="$(uname -p)"
 
 V_HTTP_REPO="http://repository.spotify.com/pool/non-free/s/spotify-client/"
@@ -60,9 +63,17 @@ cat <<EOF
 
 EOF
 sleep 3
+cat <<EOF
+VERSION: 0.7-dev
+SUPPORT: https://github.com/megamaced/spotify-easyrpm/issues
+
+MODE: ${V_RUN_MODE}
+EOF
+sleep 2
 }
 
 f_help() {
+clear
 if [[ "${V_OPTIONS}" == "-h" ]] || [[ "${V_OPTIONS}" == "--help" ]]; then
 f_logo
 cat <<EOF
@@ -91,7 +102,7 @@ the RPMs in a local filesystem repo for installing Spotify updates alongside reg
 
  ${V_SCRIPT_NAME} -remove-schedule
 
-  - Removes the cron job and local repo
+  - Removes the schedule and local repo if present
 
  
 EOF
@@ -148,10 +159,10 @@ fi
 
 
 f_config() {
-  if [ -f "${HOME}"/."${V_SCRIPT_NAME}" ]; then
-    source "${HOME}"/."${V_SCRIPT_NAME}"
+  if [ -f "${V_CONFIG_FILE}" ]; then
+    source "${V_CONFIG_FILE}"
   else
-    cat << EOF >> "${HOME}"/."${V_SCRIPT_NAME}"
+    cat << EOF >> "${V_CONFIG_FILE}"
 
 # PREFS
 PREF_PROMPT_SCHEDULE=
@@ -483,7 +494,7 @@ if [[ ! -f /etc/zypp/repos.d/${V_SCRIPT_NAME}.repo ]]; then
   f_error "Failed to add local repo to zypper. Aborting" 
  fi
 fi
-f_create_crontab
+f_create_schedule
 }
 
 f_rpm_update_local_repo() {
@@ -494,7 +505,7 @@ if ! createrepo "${V_LOCAL_REPO}"; then
 fi
 }
 
-f_create_crontab() {
+f_create_schedule() {
 if ! crontab -l | grep "${V_SCRIPT_NAME}"; then
  echo "Creating cron job in your crontab"
  crontab -l > "${V_TMP_CRON_FILE}"
@@ -547,9 +558,9 @@ cat << EOF >> "${V_NOROOT_DESKTOP_DIR}"/spotify.desktop
 Name=Spotify
 GenericName=Music Player
 Comment=Spotify streaming music client
-Icon="${V_NOROOT_INSTALL_DIR}"/icons/spotify-linux-64.png
+Icon=${V_NOROOT_INSTALL_DIR}/icons/spotify-linux-64.png
 Exec=spotify %U
-TryExec="${V_NOROOT_INSTALL_DIR}"/spotify
+TryExec=${V_NOROOT_INSTALL_DIR}/spotify
 Terminal=false
 Type=Application
 Categories=Audio;Music;Player;AudioVideo;
@@ -560,7 +571,7 @@ EOF
 
 f_noroot_ver_compare() {
   f_set_deb_ver
-  if [[ "${V_NOROOT_INSTALLED_VER}" == "${V_DEB_VER}"]]; then
+  if [[ "${V_NOROOT_INSTALLED_VER}" == "${V_DEB_VER}" ]]; then
    while true
     do
       read -rp "You have downloaded version ${V_DEB_VER} which is already installed. Continue? (y/n)" Q_NOROOT_SAME_VER
@@ -583,10 +594,10 @@ f_noroot_schedule_prompt() {
  if ! crontab -l | grep "${V_SCRIPT_NAME}"; then # Add here && [[ "${PREF_PROMPT_SCHEDULE}" != "no" ]] in v0.8
   while true
   do
-   read -rp "Do you wish to set up an automated cron job to enable updating Spotify? (y/n)?" Q_Q_SCHEDULE_ANSWER
+   read -rp "Do you wish to set up an automated cron job to enable updating Spotify? (y/n)?" Q_SCHEDULE_ANSWER
 
-  case $Q_Q_SCHEDULE_ANSWER in
-  y ) Q_V_ASK_SCHEDULE_FREQUENCY="yes"
+  case $Q_SCHEDULE_ANSWER in
+  y ) V_ASK_SCHEDULE_FREQUENCY="yes"
    break;;
 
   n ) echo "Ok skipping..."
@@ -595,14 +606,13 @@ f_noroot_schedule_prompt() {
 
   esac
  done
- fi
 fi
-if [[ "${Q_V_ASK_SCHEDULE_FREQUENCY}" == "yes" ]]; then
+if [[ "${V_ASK_SCHEDULE_FREQUENCY}" == "yes" ]]; then
   while true
   do
-   read -rp "How often do you want to check for updates (weekly/monthly)?" Q_Q_SCHEDULE_FREQUENCY_ANSWER
+   read -rp "How often do you want to check for updates (weekly/monthly)?" Q_SCHEDULE_FREQUENCY_ANSWER
 
-  case $Q_Q_SCHEDULE_FREQUENCY_ANSWER in
+  case $Q_SCHEDULE_FREQUENCY_ANSWER in
   weekly ) V_SCHEDULE_FREQUENCY="weekly"
            f_noroot_create_schedule
    break;;
@@ -618,13 +628,23 @@ fi
 
 f_noroot_create_schedule() {
 f_script_location_check
-f_create_crontab
+f_create_schedule
 }
 
 
-#f_install_homedir() {
-#  
-#}
+f_noroot_install() {
+  if [ ! -d "${V_NOROOT_INSTALL_DIR}" ]; then
+    mkdir -p "${V_NOROOT_INSTALL_DIR}"
+  else
+    rm -r "${V_NOROOT_INSTALL_DIR}"
+    mkdir -p "${V_NOROOT_INSTALL_DIR}"
+  fi
+  if ! mv "${V_SOURCES_DIR}"/spotify-client/usr/share/spotify/* "${V_NOROOT_INSTALL_DIR}"/; then
+    f_error "Failed to install Spotify"
+  fi
+  sed -i "s/\(V_NOROOT_INSTALLED_VER=\)\(.*\)/\1${V_DEB_VER}/" "${V_CONFIG_FILE}"
+  f_noroot_desktop_entry
+}
 
 
 ## MAIN PROCESS FUNCTION ##
@@ -632,7 +652,7 @@ f_create_crontab
 
 f_main() {
 clear
-if [[ "${V_RUN_MODE}" == "*prompt" ]]; then
+if [[ "${V_RUN_MODE}" == *prompt ]]; then
  f_logo
  f_rpm_install_build_deps
  f_create_local_build_dirs
@@ -660,8 +680,8 @@ elif [[ "${V_RUN_MODE}" == "noroot" ]]; then
  f_download
  f_noroot_ver_compare
  f_extract_deb
+ f_noroot_install
  f_noroot_schedule_prompt
-
 elif [[ "${V_RUN_MODE}" == "remove-schedule" ]]; then
  f_logo
  f_remove_schedule

@@ -48,8 +48,11 @@ root privileges to this script if you prefer
  
  Coming Soon (v0.8)!
 
+ * Dependency warnings for noroot installs
+ * -noroot-uninstall - Remove Spotify from your homedir
  * -create-schedule - If you already have a generated spotify rpm installed but chose 'No' when prompted to create the schedule previously
- * -uninstall - Remove Spotify from your homedir if installed with -noroot 
+
+ Coming Soon (v0.9)!
  * -localdeb - Use a local copy of a Spotify deb - Useful if you want to stick to a specific Spotify version (perhaps pre v1.0.x)
  
 

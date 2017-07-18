@@ -75,7 +75,7 @@ cat <<EOF
 EOF
 sleep 2
 cat <<EOF
-VERSION: 0.7
+VERSION: 0.8-dev
 SUPPORT: https://github.com/megamaced/spotify-easyrpm/issues
 
 MODE: ${V_RUN_MODE}
@@ -383,6 +383,7 @@ echo "Comparing downloaded version to installed version (if any)"
 f_set_deb_ver
 if [[ "$(rpm -q spotify-client | cut -f3 -d"-")" == "${V_DEB_VER}" ]]; then
  if [[ "${V_RUN_MODE}" != "prompt" ]]; then
+  echo "${V_DEB_VER} is already installed. Quitting"
   f_cleanup
   exit 0
  else

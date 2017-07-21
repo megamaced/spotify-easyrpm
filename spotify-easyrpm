@@ -247,7 +247,7 @@ fi
 echo "Creating .rpmmacros if it doesn't exist"
 if [[ ! -f "${HOME}"/.rpmmacros ]]; then
  cat << EOF >> "${HOME}"/.rpmmacros
-%_topdir /home/${USERNAME}/rpmbuild
+%_topdir /home/${USER}/rpmbuild
 EOF
 fi
 }

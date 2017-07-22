@@ -41,18 +41,19 @@ root privileges to this script if you prefer
   - Schedule automatic updates (optional)
   - Not currently compatible with -noprompt mode
 
+  spotify-easyrpm -noroot-uninstall
+
+  - Removes Spotify from your homedir
+
   spotify-easyrpm -remove-schedule
 
   - Removes the schedule and local repo if present
 
  
- Coming Soon (v0.8)!
+ Coming Soon!
 
  * Dependency warnings for noroot installs
- * -noroot-uninstall - Remove Spotify from your homedir
  * -create-schedule - If you already have a generated spotify rpm installed but chose 'No' when prompted to create the schedule previously
-
- Coming Soon (v0.9)!
  * -localdeb - Use a local copy of a Spotify deb - Useful if you want to stick to a specific Spotify version (perhaps pre v1.0.x)
  
 

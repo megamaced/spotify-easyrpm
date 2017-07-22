@@ -1,33 +1,15 @@
 #!/bin/bash
 #
-# ${V_SCRIPT_NAME} is a script which can download the latest debian package from the Spotify
+# spotify-easyrpm is a script which can download the latest debian package from the Spotify
 # repository and convert it into an RPM. It is also capable of installing, scheduling and storing
 # the RPMs in a local filesystem repo for installing Spotify updates alongside regular system updates
 #
 # Alternatively Spotify can be installed and run from your home folder which does not require you to give
 # root privileges to this script if you prefer
 #
-# ${V_SCRIPT_NAME}
+# Run "spotify-easyrpm --help" for more info
 #
-#  - Regular prompt based mode to create an RPM and optionally install and create an update schedule
-#
-# ${V_SCRIPT_NAME} -noprompt
-#
-#  - Create the RPM
-#  - Install the Spotify RPM
-#  - Set up a monthly scheduled update job
-#  - Set up a local filesystem repo
-#
-# ${V_SCRIPT_NAME} -noroot
-#
-#  - In this mode spotify-easyrpm will not require root/sudo
-#  - Spotify will run from your home folder
-#  - Schedule automatic updates (optional)
-#  - Not currently compatible with -noprompt mode
-#
-# ${V_SCRIPT_NAME} -remove-schedule
-#
-#  - Removes the schedule and local repo if present
+
 
 
 #set -x
@@ -75,7 +57,7 @@ cat <<EOF
 EOF
 sleep 2
 cat <<EOF
-VERSION: 0.7
+VERSION: 0.8
 SUPPORT: https://github.com/megamaced/spotify-easyrpm/issues
 
 MODE: ${V_RUN_MODE}
@@ -113,6 +95,10 @@ root privileges to this script if you prefer
   - Spotify will run from your home folder
   - Schedule automatic updates (optional)
   - Not currently compatible with -noprompt mode
+
+ ${V_SCRIPT_NAME} -noroot-uninstall
+
+  - Removes Spotify from your homedir
 
  ${V_SCRIPT_NAME} -remove-schedule
 
@@ -173,8 +159,8 @@ elif [[ "${V_OPTIONS}" == "-create-schedule" ]]; then
 V_RUN_MODE="create-schedule"
 elif [[ "${V_OPTIONS}" == "-remove-schedule" ]]; then
 V_RUN_MODE="remove-schedule"
-elif [[ "${V_OPTIONS}" == "-uninstall" ]]; then
-V_RUN_MODE="uninstall"
+elif [[ "${V_OPTIONS}" == "-noroot-uninstall" ]]; then
+V_RUN_MODE="noroot-uninstall"
 elif [[ -z "${V_OPTIONS}" ]]; then
 V_RUN_MODE="prompt"
 fi
@@ -261,7 +247,7 @@ fi
 echo "Creating .rpmmacros if it doesn't exist"
 if [[ ! -f "${HOME}"/.rpmmacros ]]; then
  cat << EOF >> "${HOME}"/.rpmmacros
-%_topdir /home/${USERNAME}/rpmbuild
+%_topdir /home/${USER}/rpmbuild
 EOF
 fi
 }
@@ -383,6 +369,7 @@ echo "Comparing downloaded version to installed version (if any)"
 f_set_deb_ver
 if [[ "$(rpm -q spotify-client | cut -f3 -d"-")" == "${V_DEB_VER}" ]]; then
  if [[ "${V_RUN_MODE}" != "prompt" ]]; then
+  echo "${V_DEB_VER} is already installed. Quitting"
   f_cleanup
   exit 0
  else
@@ -747,9 +734,41 @@ f_noroot_install() {
       ln -s "${V_NOROOT_INSTALL_DIR}"/spotify "${HOME}"/bin/spotify
     fi
   fi
-  echo "Done.... To uninstall run ${V_SCRIPT_NAME} -uninstall"
+  echo "Done.... To uninstall run ${V_SCRIPT_NAME} -noroot-uninstall"
 }
 
+
+f_noroot_uninstall() {
+  echo "Uninstalling Spotify from your homedir"
+  if [[ -f /usr/bin/xdg-desktop-menu ]]; then
+    if [[ -f "${V_NOROOT_INSTALL_DIR}"/spotify.desktop ]]; then
+      /usr/bin/xdg-desktop-menu uninstall "${V_NOROOT_INSTALL_DIR}"/spotify.desktop
+    fi
+  fi
+  if [ -d "${V_NOROOT_INSTALL_DIR}" ]; then
+    rm -r "${V_NOROOT_INSTALL_DIR}"
+  fi
+  if [[ -L "${HOME}"/bin/spotify ]]; then
+    rm "${HOME}"/bin/spotify
+  fi
+  sed -i "s/\(V_NOROOT_INSTALLED_VER=\)\(.*\)/\1/" "${V_CONFIG_FILE}"
+  sed -i "s/\(PREF_INSTALL_TYPE=\)\(.*\)/\1/" "${V_CONFIG_FILE}"
+  echo "Done!"
+  if crontab -l | grep "${V_SCRIPT_NAME} -scheduled"; then
+    while true
+    do
+      read -rp "Do you want to remove the schedule too (y/n)?" Q_REMOVE_SCHEDULE_ANSWER
+
+      case $Q_REMOVE_SCHEDULE_ANSWER in
+       y ) f_remove_schedule
+       break;;
+
+       n ) echo "ok"
+       exit;;
+    esac
+   done
+fi
+}
 
 
 
@@ -805,8 +824,9 @@ elif [[ "${V_RUN_MODE}" == "create-schedule" ]]; then
 elif [[ "${V_RUN_MODE}" == "remove-schedule" ]]; then
  f_logo
  f_remove_schedule
-elif [[ "${V_RUN_MODE}" == "uninstall" ]]; then
-  echo "Not implemented yet."
+elif [[ "${V_RUN_MODE}" == "noroot-uninstall" ]]; then
+ f_logo
+ f_noroot_uninstall
 fi
 }
 

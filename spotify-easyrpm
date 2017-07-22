@@ -57,7 +57,7 @@ cat <<EOF
 EOF
 sleep 2
 cat <<EOF
-VERSION: 0.8-dev
+VERSION: 0.8
 SUPPORT: https://github.com/megamaced/spotify-easyrpm/issues
 
 MODE: ${V_RUN_MODE}

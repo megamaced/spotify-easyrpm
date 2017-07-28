@@ -57,7 +57,7 @@ cat <<EOF
 EOF
 sleep 2
 cat <<EOF
-VERSION: 0.9-dev
+VERSION: 0.9
 SUPPORT: https://github.com/megamaced/spotify-easyrpm/issues
 
 MODE: ${V_RUN_MODE}
@@ -67,7 +67,8 @@ EOF
 
 f_help() {
 clear
-if [[ "${V_OPTIONS}" == "-h" ]] || [[ "${V_OPTIONS}" == "--help" ]]; then
+if [[ "${V_OPTIONS}" == "-h" ]] || [[ "${V_OPTIONS}" == *help ]]; then
+V_RUN_MODE="help"
 f_logo
 cat <<EOF
 
@@ -99,6 +100,10 @@ root privileges to this script if you prefer
  ${V_SCRIPT_NAME} -noroot-uninstall
 
   - Removes Spotify from your homedir
+
+ ${V_SCRIPT_NAME} -create-schedule
+
+  - If you previously opted out creating an automated update schedule but now desire it
 
  ${V_SCRIPT_NAME} -remove-schedule
 
@@ -163,6 +168,11 @@ elif [[ "${V_OPTIONS}" == "-noroot-uninstall" ]]; then
 V_RUN_MODE="noroot-uninstall"
 elif [[ -z "${V_OPTIONS}" ]]; then
 V_RUN_MODE="prompt"
+else
+  V_RUN_MODE="invalid"
+  f_logo
+  echo "Unrecognised option. Run -help for more info"
+  exit 1
 fi
 }
 
@@ -281,7 +291,7 @@ else
   if [[ "${V_RUN_MODE}" == "create-schedule" ]] || [[ "${PREF_PROMPT_SCHEDULE}" != "NO" ]]; then
   while true
   do
-   read -rp "Do you wish to set up an automated update schedule and local repo to enable updating Spotify alongside regular system updates (y/n)?" Q_SCHEDULE_ANSWER
+   read -rp "Do you wish to set up an automated update schedule (y/n)?" Q_SCHEDULE_ANSWER
 
   case $Q_SCHEDULE_ANSWER in
   y ) V_ASK_SCHEDULE_FREQUENCY="yes"
@@ -315,12 +325,14 @@ if [[ "${V_ASK_SCHEDULE_FREQUENCY}" == "yes" ]]; then
 
   esac
  done
- if [[ "${PREF_INSTALL_TYPE}" == "RPM" ]]; then
+ if [[ "${PREF_INSTALL_TYPE}" == "RPM" ]] || [[ "${V_RUN_MODE}" == "prompt" ]]; then
+  echo "Detected RPM based installation"
   f_rpm_create_schedule
- elif [[ "${PREF_INSTALL_TYPE}" == "NOROOT" ]]; then
+ elif [[ "${PREF_INSTALL_TYPE}" == "NOROOT" ]] || [[ "${V_RUN_MODE}" == "noroot" ]]; then
+  echo "Detected NO ROOT installation"
   f_noroot_create_schedule
  else
-  echo "INSTALL_TYPE not set correctly in ${V_CONFIG_FILE}"
+  echo "PREF_INSTALL_TYPE not set correctly in ${V_CONFIG_FILE}. Run spotify-easyrpm to create a new installation"
   exit 1
  fi
 fi

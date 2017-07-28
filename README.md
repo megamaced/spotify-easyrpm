@@ -45,6 +45,10 @@ root privileges to this script if you prefer
 
   - Removes Spotify from your homedir
 
+  spotify-easyrpm -create-schedule
+
+  - If you previously opted out creating an automated update schedule but now desire it
+
   spotify-easyrpm -remove-schedule
 
   - Removes the schedule and local repo if present
@@ -52,15 +56,14 @@ root privileges to this script if you prefer
  
  Coming Soon!
 
- * Dependency warnings for noroot installs
- * -create-schedule - If you already have a generated spotify rpm installed but chose 'No' when prompted to create the schedule previously
+ * Dependency warnings for noroot installs (If you installed spotify-easyrpm from OBS with recommends you will already have everything you need)
  * -localdeb - Use a local copy of a Spotify deb - Useful if you want to stick to a specific Spotify version (perhaps pre v1.0.x)
  
 
  Requirements
 
- * openSUSE 13.2 or later
- * SLE 12 or later
+ * Regular RPM mode - openSUSE 13.2 or later, SLE 12 or later
+ * NO ROOT mode - Any recent Linux distribution should work (only SUSE distros tested)
 
 
  Download links (One Click Install)
@@ -74,5 +77,5 @@ root privileges to this script if you prefer
  Wishlist
 
  * Check the Spotify repository for available versions for comparision before attempting to download anything
- * Add support for other non Debian based distributions
+ * Add support for other non Debian based distributions (NOROOT mode should already be universal)
 

@@ -57,7 +57,7 @@ cat <<EOF
 EOF
 sleep 2
 cat <<EOF
-VERSION: 0.8
+VERSION: 0.9-dev
 SUPPORT: https://github.com/megamaced/spotify-easyrpm/issues
 
 MODE: ${V_RUN_MODE}
@@ -271,6 +271,62 @@ fi
 }
 
 
+f_schedule_prompt() {
+if [[ "${V_RUN_MODE}" == "noprompt" ]]; then
+ V_SCHEDULE_FREQUENCY="monthly"
+ f_rpm_create_schedule
+else
+  echo "Checking for an existing schedule"
+ if ! crontab -l | grep "${V_SCRIPT_NAME} -scheduled"; then
+  if [[ "${V_RUN_MODE}" == "create-schedule" ]] || [[ "${PREF_PROMPT_SCHEDULE}" != "NO" ]]; then
+  while true
+  do
+   read -rp "Do you wish to set up an automated update schedule and local repo to enable updating Spotify alongside regular system updates (y/n)?" Q_SCHEDULE_ANSWER
+
+  case $Q_SCHEDULE_ANSWER in
+  y ) V_ASK_SCHEDULE_FREQUENCY="yes"
+   break;;
+
+  n ) echo "Ok skipping...If you want to create this in the future just run ${V_SCRIPT_NAME} -create-schedule"
+      sed -i "s/\(PREF_PROMPT_SCHEDULE=\)\(.*\)/\1NO/" "${V_CONFIG_FILE}"
+   break;;
+
+  esac
+ done
+else
+  echo "Skipping schedule prompt as you previously opted out"
+ fi
+else
+  echo "Found existing schedule. Skipping"
+fi
+fi
+
+if [[ "${V_ASK_SCHEDULE_FREQUENCY}" == "yes" ]]; then
+  while true
+  do
+   read -rp "How often do you want to check for updates (weekly/monthly)?" Q_SCHEDULE_FREQUENCY_ANSWER
+
+  case $Q_SCHEDULE_FREQUENCY_ANSWER in
+  weekly ) V_SCHEDULE_FREQUENCY="weekly"
+   break;;
+
+  monthly ) V_SCHEDULE_FREQUENCY="monthly"
+   break;;
+
+  esac
+ done
+ if [[ "${PREF_INSTALL_TYPE}" == "RPM" ]]; then
+  f_rpm_create_schedule
+ elif [[ "${PREF_INSTALL_TYPE}" == "NOROOT" ]]; then
+  f_noroot_create_schedule
+ else
+  echo "INSTALL_TYPE not set correctly in ${V_CONFIG_FILE}"
+  exit 1
+ fi
+fi
+}
+
+
 f_create_schedule() {
 if ! crontab -l | grep "${V_SCRIPT_NAME} -scheduled"; then
  echo "Creating cron job in your crontab"
@@ -280,6 +336,7 @@ if ! crontab -l | grep "${V_SCRIPT_NAME} -scheduled"; then
 EOF
  if crontab "${V_TMP_CRON_FILE}"; then
   rm "${V_TMP_CRON_FILE}"
+  sed -i "s/\(PREF_PROMPT_SCHEDULE=\)\(.*\)/\1YES/" "${V_CONFIG_FILE}"
  else
   rm "${V_TMP_CRON_FILE}"
   f_error "Failed to create cron job in your crontab"
@@ -381,7 +438,7 @@ if [[ "$(rpm -q spotify-client | cut -f3 -d"-")" == "${V_DEB_VER}" ]]; then
       y ) echo "ok"
       break;;
 
-      n ) f_rpm_schedule_prompt
+      n ) f_schedule_prompt
           f_cleanup
           echo "bye"
       exit;;
@@ -530,49 +587,6 @@ sed -i "s/\(PREF_INSTALL_TYPE=\)\(.*\)/\1RPM/" "${V_CONFIG_FILE}"
 }
 
 
-f_rpm_schedule_prompt() {
-if [[ "${V_RUN_MODE}" != "prompt" ]]; then
- V_SCHEDULE_FREQUENCY="monthly"
- f_rpm_create_schedule
-else
-  echo "Checking for an existing schedule"
- if ! crontab -l | grep "${V_SCRIPT_NAME} -scheduled" && [[ "${PREF_PROMPT_SCHEDULE}" != "NO" ]]; then
-  while true
-  do
-   read -rp "Do you wish to set up an automated update schedule and local repo to enable updating Spotify alongside regular system updates (y/n)?" Q_SCHEDULE_ANSWER
-
-  case $Q_SCHEDULE_ANSWER in
-  y ) V_ASK_SCHEDULE_FREQUENCY="yes"
-   break;;
-
-  n ) echo "Ok skipping...If you want to create this in the future just run ${V_SCRIPT_NAME} -create-schedule"
-      sed -i "s/\(PREF_PROMPT_SCHEDULE=\)\(.*\)/\1NO/" "${V_CONFIG_FILE}"
-   break;;
-
-  esac
- done
- fi
-fi
-if [[ "${V_ASK_SCHEDULE_FREQUENCY}" == "yes" ]]; then
-  while true
-  do
-   read -rp "How often do you want to check for updates (weekly/monthly)?" Q_SCHEDULE_FREQUENCY_ANSWER
-
-  case $Q_SCHEDULE_FREQUENCY_ANSWER in
-  weekly ) V_SCHEDULE_FREQUENCY="weekly"
-           f_rpm_create_schedule
-   break;;
-
-  monthly ) V_SCHEDULE_FREQUENCY="monthly"
-           f_rpm_create_schedule
-   break;;
-
-  esac
- done
-fi
-}
-
-
 f_rpm_create_schedule() {
 f_script_location_check
 if ! rpm -q createrepo > /dev/null 2>&1; then
@@ -659,7 +673,7 @@ f_noroot_ver_compare() {
         y ) echo "ok"
             break;;
 
-        n ) f_noroot_schedule_prompt
+        n ) f_schedule_prompt
             f_cleanup
             echo "bye"
       exit;;
@@ -667,43 +681,6 @@ f_noroot_ver_compare() {
     esac
   done
  fi
-fi
-}
-
-
-f_noroot_schedule_prompt() {
- if ! crontab -l | grep "${V_SCRIPT_NAME} -scheduled" && [[ "${PREF_PROMPT_SCHEDULE}" != "NO" ]]; then
-  while true
-  do
-   read -rp "Do you wish to set up an automated cron job to enable updating Spotify? (y/n)?" Q_SCHEDULE_ANSWER
-
-  case $Q_SCHEDULE_ANSWER in
-  y ) V_ASK_SCHEDULE_FREQUENCY="yes"
-   break;;
-
-  n ) echo "Ok skipping...If you want to create this in the future just run ${V_SCRIPT_NAME} -create-schedule"
-      sed -i "s/\(PREF_PROMPT_SCHEDULE=\)\(.*\)/\1NO/" "${V_CONFIG_FILE}"
-   break;;
-
-  esac
- done
-fi
-if [[ "${V_ASK_SCHEDULE_FREQUENCY}" == "yes" ]]; then
-  while true
-  do
-   read -rp "How often do you want to check for updates (weekly/monthly)?" Q_SCHEDULE_FREQUENCY_ANSWER
-
-  case $Q_SCHEDULE_FREQUENCY_ANSWER in
-  weekly ) V_SCHEDULE_FREQUENCY="weekly"
-           f_noroot_create_schedule
-   break;;
-
-  monthly ) V_SCHEDULE_FREQUENCY="monthly"
-           f_noroot_create_schedule
-   break;;
-
-  esac
- done
 fi
 }
 
@@ -792,7 +769,7 @@ if [[ "${V_RUN_MODE}" == *prompt ]]; then
  f_rpm_spec
  f_rpm_run_build
  f_rpm_install_prompt
- f_rpm_schedule_prompt
+ f_schedule_prompt
 elif [[ "${V_RUN_MODE}" == "noroot" ]]; then
  f_logo
  f_install_check
@@ -801,7 +778,7 @@ elif [[ "${V_RUN_MODE}" == "noroot" ]]; then
  f_noroot_ver_compare
  f_extract_deb
  f_noroot_install
- f_noroot_schedule_prompt
+ f_schedule_prompt
 elif [[ "${V_RUN_MODE}" == "scheduled" ]]; then
  f_download
  if [[ "${PREF_INSTALL_TYPE}" == "NOROOT" ]]; then
@@ -820,7 +797,8 @@ else
   f_rpm_update_local_repo
 fi
 elif [[ "${V_RUN_MODE}" == "create-schedule" ]]; then
-  echo "Not implemented yet. Manually remove PREF_PROMPT_SCHEDULE= NO value in ${V_CONFIG_FILE} and run ${V_SCRIPT_NAME} again"
+ f_logo
+ f_schedule_prompt
 elif [[ "${V_RUN_MODE}" == "remove-schedule" ]]; then
  f_logo
  f_remove_schedule

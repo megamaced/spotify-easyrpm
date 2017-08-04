@@ -57,7 +57,7 @@ cat <<EOF
 EOF
 sleep 2
 cat <<EOF
-VERSION: 0.9.1
+VERSION: 1.0.0-dev
 SUPPORT: https://github.com/megamaced/spotify-easyrpm/issues
 
 MODE: ${V_RUN_MODE}
@@ -230,6 +230,9 @@ f_install_check() {
  fi
 fi
 }
+
+# SHOW SPOTIFY VERSIONS ON REPO
+# curl -s --list-only  http://repository.spotify.com/pool/non-free/s/spotify-client/ | grep -wo spotify-client.*"${V_DEB_ARCH}".deb | cut -f2 -d">" | sort
 
 f_download() {
 echo "Downloading latest Spotify debs"

@@ -31,7 +31,7 @@ root privileges to this script if you prefer
 
   - Create the RPM
   - Install the Spotify RPM
-  - Set up a monthly scheduled update job
+  - Set up a weekly scheduled update job
   - Set up a local filesystem repo
 
   spotify-easyrpm -noroot
@@ -72,10 +72,4 @@ root privileges to this script if you prefer
  * openSUSE 42.2 https://software.opensuse.org/ymp/home:megamaced/openSUSE_Leap_42.2/spotify-easyrpm.ymp?base=openSUSE%3ALeap%3A42.2&query=spotify-easyrpm
  * openSUSE 42.3 https://software.opensuse.org/ymp/home:megamaced/openSUSE_Leap_42.3/spotify-easyrpm.ymp?base=openSUSE%3ALeap%3A42.2&query=spotify-easyrpm
  * openSUSE Tumbleweed https://software.opensuse.org/ymp/home:megamaced/openSUSE_Tumbleweed/spotify-easyrpm.ymp?base=openSUSE%3AFactory&query=spotify-easyrpm
-
-
- Wishlist
-
- * Check the Spotify repository for available versions for comparision before attempting to download anything
- * Add support for other non Debian based distributions (NOROOT mode should already be universal)
 

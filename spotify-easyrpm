@@ -28,7 +28,8 @@ V_CONFIG_FILE="${HOME}/.${V_SCRIPT_NAME}"
 
 V_SYS_ARCH="$(uname -p)"
 
-V_HTTP_REPO="http://repository.spotify.com/pool/non-free/s/spotify-client/"
+V_PKGNAME="spotify-client"
+V_HTTP_REPO="http://repository.spotify.com/pool/non-free/s/${V_PKGNAME}/"
 
 V_SOURCES_DIR="${HOME}/rpmbuild/SOURCES"
 V_SPECS_DIR="${HOME}/rpmbuild/SPECS"
@@ -37,7 +38,7 @@ V_RPMS_DIR="${HOME}/rpmbuild/RPMS"
 V_TMP_CRON_FILE="${HOME}/${V_SCRIPT_NAME}.tmp"
 V_LOCAL_REPO="/var/cache/${V_SCRIPT_NAME}"
 
-V_NOROOT_INSTALL_DIR="${HOME}/.local/spotify-client"
+V_NOROOT_INSTALL_DIR="${HOME}/.local/${V_PKGNAME}"
 
 
 
@@ -57,7 +58,7 @@ cat <<EOF
 EOF
 sleep 2
 cat <<EOF
-VERSION: 1.0.0-dev
+VERSION: 1.0.0
 SUPPORT: https://github.com/megamaced/spotify-easyrpm/issues
 
 MODE: ${V_RUN_MODE}
@@ -87,7 +88,7 @@ root privileges to this script if you prefer
 
   - Create the RPM
   - Install the Spotify RPM
-  - Set up a monthly scheduled update job
+  - Set up a weekly scheduled update job
   - Set up a local filesystem repo
 
  ${V_SCRIPT_NAME} -noroot
@@ -128,7 +129,7 @@ echo "Cleaning up"
 rm "${V_SOURCES_DIR}"/index.html > /dev/null 2>&1
 rm "${V_SOURCES_DIR}"/data.tar.gz > /dev/null 2>&1
 rm -r "${V_SOURCES_DIR:?}"/usr > /dev/null 2>&1
-rm -r "${V_SOURCES_DIR}"/spotify-client* > /dev/null 2>&1
+rm -r "${V_SOURCES_DIR}"/"${V_PKGNAME}"* > /dev/null 2>&1
 echo "done"
 }
 
@@ -231,24 +232,18 @@ f_install_check() {
 fi
 }
 
-# SHOW SPOTIFY VERSIONS ON REPO
-# curl -s --list-only  http://repository.spotify.com/pool/non-free/s/spotify-client/ | grep -wo spotify-client.*"${V_DEB_ARCH}".deb | cut -f2 -d">" | sort
 
 f_download() {
-echo "Downloading latest Spotify debs"
-if ! wget -e robots=off --no-directories --recursive --no-parent -P "${V_SOURCES_DIR}"/ "${V_HTTP_REPO}" -A spotify-client*"${V_DEB_ARCH}".deb; then
+echo "Downloading the latest Spotify deb"
+if ! wget -P "${V_SOURCES_DIR}"/ "${V_HTTP_REPO}"/"${V_REPO_LATEST_DEB}"; then
 f_error "Failed to download Spotify. Aborting"
-fi
-echo "Checking if we downloaded multiple versions"
-if [[ "$(find "${V_SOURCES_DIR}" -name spotify-client*.deb | wc -l)" -gt 1 ]]; then
- echo "Removing the older downloaded versions"
- find "${V_SOURCES_DIR}" -name spotify-client*.deb | sort | sed \$d | xargs -d '\n' rm
 fi
 }
 
 
 f_set_deb_ver() {
-V_DEB_VER="$(find "${V_SOURCES_DIR}"/ -name spotify-client*.deb | cut -f2 -d"_" | cut -f1 -d"-")"
+V_REPO_LATEST_DEB="$(curl -s --list-only "${V_HTTP_REPO}" | grep -wo "${V_PKGNAME}".*"${V_DEB_ARCH}".deb | cut -f2 -d">" | sort | tail -n1)"
+V_DEB_VER="$(echo $V_REPO_LATEST_DEB | cut -f2 -d"_" | cut -f1 -d"-")"
 }
 
 
@@ -273,12 +268,12 @@ fi
 
 f_extract_deb() {
 echo "Extracting deb and preparing"
-ar -x "${V_SOURCES_DIR}"/spotify-client*"${V_DEB_ARCH}".deb || f_error "Failed to extract deb"
+ar -x "${V_SOURCES_DIR}"/"${V_PKGNAME}"*"${V_DEB_ARCH}".deb || f_error "Failed to extract deb"
 rm control.tar.gz debian-binary
 mv data.tar.gz "${V_SOURCES_DIR}"/
 tar xzf "${V_SOURCES_DIR}"/data.tar.gz -C "${V_SOURCES_DIR}"/
-mkdir -p "${V_SOURCES_DIR}"/spotify-client
-mv "${V_SOURCES_DIR}"/usr "${V_SOURCES_DIR}"/spotify-client/
+mkdir -p "${V_SOURCES_DIR}"/"${V_PKGNAME}"
+mv "${V_SOURCES_DIR}"/usr "${V_SOURCES_DIR}"/"${V_PKGNAME}"/
 }
 
 
@@ -291,7 +286,7 @@ fi
 
 f_schedule_prompt() {
 if [[ "${V_RUN_MODE}" == "noprompt" ]]; then
- V_SCHEDULE_FREQUENCY="monthly"
+ V_SCHEDULE_FREQUENCY="weekly"
  f_rpm_create_schedule
 else
   echo "Checking for an existing schedule"
@@ -417,15 +412,15 @@ fi
 
 f_rpm_prepare_src() {
 echo "Preparing RPM src tarball"
-mkdir -p "${V_SOURCES_DIR}"/spotify-client/usr/share/applications
+mkdir -p "${V_SOURCES_DIR}"/"${V_PKGNAME}"/usr/share/applications
 f_rpm_desktop_entry
 f_set_deb_ver
-tar czf "${V_SOURCES_DIR}"/spotify-client-"${V_DEB_VER}".tar.gz -C "${V_SOURCES_DIR}"/ spotify-client
+tar czf "${V_SOURCES_DIR}"/"${V_PKGNAME}"-"${V_DEB_VER}".tar.gz -C "${V_SOURCES_DIR}"/ "${V_PKGNAME}"
 }
 
 
 f_rpm_desktop_entry() {
-cat << EOF > "${V_SOURCES_DIR}"/spotify-client/usr/share/applications/spotify.desktop
+cat << EOF > "${V_SOURCES_DIR}"/"${V_PKGNAME}"/usr/share/applications/spotify.desktop
 [Desktop Entry]
 Name=Spotify
 GenericName=Music Player
@@ -442,9 +437,9 @@ EOF
 
 
 f_rpm_ver_compare() {
-echo "Comparing downloaded version to installed version (if any)"
+echo "Comparing repo version to installed version (if any)"
 f_set_deb_ver
-if [[ "$(rpm -q spotify-client | cut -f3 -d"-")" == "${V_DEB_VER}" ]]; then
+if [[ "$(rpm -q "${V_PKGNAME}" | cut -f3 -d"-")" == "${V_DEB_VER}" ]]; then
  if [[ "${V_RUN_MODE}" != "prompt" ]]; then
   echo "${V_DEB_VER} is already installed. Quitting"
   f_cleanup
@@ -452,7 +447,7 @@ if [[ "$(rpm -q spotify-client | cut -f3 -d"-")" == "${V_DEB_VER}" ]]; then
  else
  while true
   do
-   read -rp "You have downloaded version ${V_DEB_VER} which is already installed. Continue? (y/n)" Q_SAME_VER_CONTINUE
+   read -rp "The latest version in the repo is ${V_DEB_VER} which is already installed. Continue? (y/n)" Q_SAME_VER_CONTINUE
     case $Q_SAME_VER_CONTINUE in
  
       y ) echo "ok"
@@ -483,7 +478,7 @@ echo "Writing new build file"
 
 cat << EOF > "${V_SPECS_DIR}"/spotify.spec
 #
-# spec file for package spotify-client
+# spec file for package ${V_PKGNAME}
 #
 # Copyright (c) 2015 SUSE LINUX Products GmbH, Nuernberg, Germany.
 #
@@ -499,7 +494,7 @@ cat << EOF > "${V_SPECS_DIR}"/spotify.spec
 # Please submit bugfixes or comments via http://bugs.opensuse.org/
 #
 
-Name:   spotify-client
+Name:   ${V_PKGNAME}
 Version:  ${V_DEB_VER}
 Release:  0
 License:  https://www.spotify.com/legal/end-user-agreement
@@ -561,7 +556,7 @@ cp -r usr %{buildroot}/
 %dir /usr/share/spotify
 /usr/share/spotify/*
 /usr/bin/spotify
-/usr/share/doc/spotify-client/*
+/usr/share/doc/${V_PKGNAME}/*
 /usr/share/applications/spotify.desktop
 EOF
 }
@@ -599,9 +594,9 @@ fi
 
 
 f_rpm_install() {
-echo "Installing spotify-client-${V_DEB_VER}"
-if ! sudo zypper --non-interactive --no-gpg-check in "${V_RPMS_DIR}"/"${V_RPM_ARCH}"/spotify-client-"${V_DEB_VER}"*"${V_RPM_ARCH}".rpm; then
-  f_error "Failed to install spotify-client-${V_DEB_VER}"
+echo "Installing ${V_PKGNAME}-${V_DEB_VER}"
+if ! sudo zypper --non-interactive --no-gpg-check in "${V_RPMS_DIR}"/"${V_RPM_ARCH}"/"${V_PKGNAME}"-"${V_DEB_VER}"*"${V_RPM_ARCH}".rpm; then
+  f_error "Failed to install ${V_PKGNAME}-${V_DEB_VER}"
 fi
 sed -i "s/\(PREF_INSTALL_TYPE=\)\(.*\)/\1RPM/" "${V_CONFIG_FILE}"
 }
@@ -640,7 +635,7 @@ f_create_schedule
 
 f_rpm_update_local_repo() {
 echo "Moving RPMs from your rpmbuild ${V_RPMS_DIR} to your local repo ${V_LOCAL_REPO}"
-find "${V_RPMS_DIR}"/"${V_RPM_ARCH}"/ -name spotify-client-*"${V_RPM_ARCH}".rpm -type f -exec mv -t "${V_LOCAL_REPO}" {} \+
+find "${V_RPMS_DIR}"/"${V_RPM_ARCH}"/ -name "${V_PKGNAME}"-*"${V_RPM_ARCH}".rpm -type f -exec mv -t "${V_LOCAL_REPO}" {} \+
 if ! createrepo "${V_LOCAL_REPO}"; then
  f_error "Failed to create local repo. Aborting"
 fi
@@ -678,7 +673,7 @@ fi
 
 
 f_noroot_ver_compare() {
-  echo "Comparing downloaded version to installed version (if any)"
+  echo "Comparing the repo version to installed version (if any)"
   f_set_deb_ver
   if [[ "${V_NOROOT_INSTALLED_VER}" == "${V_DEB_VER}" ]]; then
    if [[ "${V_RUN_MODE}" != "noroot" ]]; then
@@ -687,7 +682,7 @@ f_noroot_ver_compare() {
   else
    while true
     do
-      read -rp "You have downloaded version ${V_DEB_VER} which is already installed. Continue? (y/n)" Q_NOROOT_SAME_VER
+      read -rp "The latest version in the repo is ${V_DEB_VER} which is already installed. Continue? (y/n)" Q_NOROOT_SAME_VER
        case $Q_NOROOT_SAME_VER in
  
         y ) echo "ok"
@@ -719,7 +714,7 @@ f_noroot_install() {
     rm -r "${V_NOROOT_INSTALL_DIR}"
     mkdir -p "${V_NOROOT_INSTALL_DIR}"
   fi
-  if ! mv "${V_SOURCES_DIR}"/spotify-client/usr/share/spotify/* "${V_NOROOT_INSTALL_DIR}"/; then
+  if ! mv "${V_SOURCES_DIR}"/"${V_PKGNAME}"/usr/share/spotify/* "${V_NOROOT_INSTALL_DIR}"/; then
     f_error "Failed to install Spotify"
   fi
   sed -i "s/\(V_NOROOT_INSTALLED_VER=\)\(.*\)/\1${V_DEB_VER}/" "${V_CONFIG_FILE}"
@@ -781,8 +776,8 @@ if [[ "${V_RUN_MODE}" == *prompt ]]; then
  f_install_check
  f_rpm_install_build_deps
  f_create_local_build_dirs
- f_download
  f_rpm_ver_compare
+ f_download
  f_extract_deb
  f_rpm_prepare_src
  f_rpm_spec_bak
@@ -794,18 +789,18 @@ elif [[ "${V_RUN_MODE}" == "noroot" ]]; then
  f_logo
  f_install_check
  f_create_local_build_dirs
- f_download
  f_noroot_ver_compare
+ f_download
  f_extract_deb
  f_noroot_install
  f_schedule_prompt
 elif [[ "${V_RUN_MODE}" == "scheduled" ]]; then
- f_download
  if [[ "${PREF_INSTALL_TYPE}" == "NOROOT" ]]; then
   f_noroot_ver_compare
  else
   f_rpm_ver_compare
  fi
+ f_download
  f_extract_deb
  if [[ "${PREF_INSTALL_TYPE}" == "NOROOT" ]]; then
   f_noroot_install

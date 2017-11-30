@@ -110,7 +110,7 @@ root privileges to this script if you prefer
 
   - Removes the schedule and local repo if present
 
- 
+
 EOF
  exit 0
 fi
@@ -129,7 +129,7 @@ echo "Cleaning up"
 rm "${V_SOURCES_DIR}"/index.html > /dev/null 2>&1
 rm "${V_SOURCES_DIR}"/data.tar.gz > /dev/null 2>&1
 rm -r "${V_SOURCES_DIR:?}"/usr > /dev/null 2>&1
-rm -r "${V_SOURCES_DIR}"/"${V_PKGNAME}"* > /dev/null 2>&1
+rm -r "${V_SOURCES_DIR:?}"/"${V_PKGNAME}"* > /dev/null 2>&1
 echo "done"
 }
 
@@ -203,7 +203,7 @@ f_install_check() {
     do
       read -rp "You are in RPM mode but you have a NOROOT install. Continue? (y/n)" Q_CONTINUE_MODE_CONFLICT
       case $Q_CONTINUE_MODE_CONFLICT in
- 
+
       y ) echo "ok"
       break;;
 
@@ -450,7 +450,7 @@ if [[ "$(rpm -q "${V_PKGNAME}" | cut -f3 -d"-")" == "${V_DEB_VER}" ]]; then
   do
    read -rp "The latest version in the repo is ${V_DEB_VER} which is already installed. Continue? (y/n)" Q_SAME_VER_CONTINUE
     case $Q_SAME_VER_CONTINUE in
- 
+
       y ) echo "ok"
       break;;
 
@@ -535,7 +535,7 @@ Otherwise, the native Linux client is the recommended way to listen to Spotify
 on Linux systems.
 
 %prep
-%setup -q -n %{name} 
+%setup -q -n %{name}
 
 %install
 mkdir -p %{buildroot}/usr
@@ -576,7 +576,7 @@ fi
 f_rpm_install_prompt() {
 if [[ "${V_RUN_MODE}" != "prompt" ]]; then
   f_rpm_install
-else 
+else
  while true
   do
    read -rp "Do you wish to install the Spotify RPM (y/n)?" Q_RPM_INSTALL
@@ -585,7 +585,7 @@ else
   y ) f_rpm_install
    break;;
 
-  n ) echo "OK not installing now" 
+  n ) echo "OK not installing now"
    break;;
 
   esac
@@ -626,7 +626,7 @@ f_rpm_update_local_repo
 if [[ ! -f /etc/zypp/repos.d/${V_SCRIPT_NAME}.repo ]]; then
  echo "Adding local file system repository to zypper"
  if ! sudo zypper ar -G --refresh "${V_LOCAL_REPO}" "${V_SCRIPT_NAME}"; then
-  f_error "Failed to add local repo to zypper. Aborting" 
+  f_error "Failed to add local repo to zypper. Aborting"
  fi
 fi
 f_create_schedule
@@ -684,7 +684,7 @@ f_noroot_ver_compare() {
     do
       read -rp "The latest version in the repo is ${V_DEB_VER} which is already installed. Continue? (y/n)" Q_NOROOT_SAME_VER
        case $Q_NOROOT_SAME_VER in
- 
+
         y ) echo "ok"
             break;;
 

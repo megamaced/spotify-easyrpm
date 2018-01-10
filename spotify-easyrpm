@@ -58,7 +58,7 @@ cat <<EOF
 EOF
 sleep 2
 cat <<EOF
-VERSION: 1.0.1
+VERSION: 1.1.0
 SUPPORT: https://github.com/megamaced/spotify-easyrpm/issues
 
 MODE: ${V_RUN_MODE}
@@ -110,7 +110,11 @@ root privileges to this script if you prefer
 
   - Removes the schedule and local repo if present
 
- 
+ ${V_SCRIPT_NAME} -clean-repo
+
+  - Cleans up the local filesystem repo
+
+
 EOF
  exit 0
 fi
@@ -129,7 +133,7 @@ echo "Cleaning up"
 rm "${V_SOURCES_DIR}"/index.html > /dev/null 2>&1
 rm "${V_SOURCES_DIR}"/data.tar.gz > /dev/null 2>&1
 rm -r "${V_SOURCES_DIR:?}"/usr > /dev/null 2>&1
-rm -r "${V_SOURCES_DIR}"/"${V_PKGNAME}"* > /dev/null 2>&1
+rm -r "${V_SOURCES_DIR:?}"/"${V_PKGNAME}"* > /dev/null 2>&1
 echo "done"
 }
 
@@ -167,6 +171,8 @@ elif [[ "${V_OPTIONS}" == "-remove-schedule" ]]; then
 V_RUN_MODE="remove-schedule"
 elif [[ "${V_OPTIONS}" == "-noroot-uninstall" ]]; then
 V_RUN_MODE="noroot-uninstall"
+elif [[ "${V_OPTIONS}" == "-clean-repo" ]]; then
+V_RUN_MODE="clean-repo"
 elif [[ -z "${V_OPTIONS}" ]]; then
 V_RUN_MODE="prompt"
 else
@@ -203,7 +209,7 @@ f_install_check() {
     do
       read -rp "You are in RPM mode but you have a NOROOT install. Continue? (y/n)" Q_CONTINUE_MODE_CONFLICT
       case $Q_CONTINUE_MODE_CONFLICT in
- 
+
       y ) echo "ok"
       break;;
 
@@ -438,11 +444,11 @@ EOF
 
 
 f_rpm_ver_compare() {
-echo "Comparing repo version to installed version (if any)"
+echo "Comparing debian repo version to installed or local machine repo version (if any)"
 f_set_deb_ver
-if [[ "$(rpm -q "${V_PKGNAME}" | cut -f3 -d"-")" == "${V_DEB_VER}" ]]; then
+if [[ "$(rpm -q "${V_PKGNAME}" | cut -f3 -d"-")" == "${V_DEB_VER}" ]] || [[ "$(find ${V_LOCAL_REPO} -type f -name "*.rpm" | sort | tail -n1 | cut -f4 -d"-")" == "${V_DEB_VER}" ]] ; then
  if [[ "${V_RUN_MODE}" != "prompt" ]]; then
-  echo "${V_DEB_VER} is already installed. Quitting"
+  echo "spotify-client ${V_DEB_VER} is already installed or available from local machine repo. Quitting"
   f_cleanup
   exit 0
  else
@@ -450,7 +456,7 @@ if [[ "$(rpm -q "${V_PKGNAME}" | cut -f3 -d"-")" == "${V_DEB_VER}" ]]; then
   do
    read -rp "The latest version in the repo is ${V_DEB_VER} which is already installed. Continue? (y/n)" Q_SAME_VER_CONTINUE
     case $Q_SAME_VER_CONTINUE in
- 
+
       y ) echo "ok"
       break;;
 
@@ -535,7 +541,7 @@ Otherwise, the native Linux client is the recommended way to listen to Spotify
 on Linux systems.
 
 %prep
-%setup -q -n %{name} 
+%setup -q -n %{name}
 
 %install
 mkdir -p %{buildroot}/usr
@@ -576,7 +582,7 @@ fi
 f_rpm_install_prompt() {
 if [[ "${V_RUN_MODE}" != "prompt" ]]; then
   f_rpm_install
-else 
+else
  while true
   do
    read -rp "Do you wish to install the Spotify RPM (y/n)?" Q_RPM_INSTALL
@@ -585,7 +591,7 @@ else
   y ) f_rpm_install
    break;;
 
-  n ) echo "OK not installing now" 
+  n ) echo "OK not installing now"
    break;;
 
   esac
@@ -626,7 +632,7 @@ f_rpm_update_local_repo
 if [[ ! -f /etc/zypp/repos.d/${V_SCRIPT_NAME}.repo ]]; then
  echo "Adding local file system repository to zypper"
  if ! sudo zypper ar -G --refresh "${V_LOCAL_REPO}" "${V_SCRIPT_NAME}"; then
-  f_error "Failed to add local repo to zypper. Aborting" 
+  f_error "Failed to add local repo to zypper. Aborting"
  fi
 fi
 f_create_schedule
@@ -634,14 +640,20 @@ f_create_schedule
 
 
 f_rpm_update_local_repo() {
+if [[ "${V_RUN_MODE}" != "clean-repo" ]]; then
 echo "Moving RPMs from your rpmbuild ${V_RPMS_DIR} to your local repo ${V_LOCAL_REPO}"
 find "${V_RPMS_DIR}"/"${V_RPM_ARCH}"/ -name "${V_PKGNAME}"-*"${V_RPM_ARCH}".rpm -type f -exec mv -t "${V_LOCAL_REPO}" {} \+
+fi
 if ! createrepo "${V_LOCAL_REPO}"; then
- f_error "Failed to create local repo. Aborting"
+ f_error "Failed to create / update local repo. Aborting"
 fi
 }
 
-
+f_clean_repo() {
+sudo find "${V_LOCAL_REPO}" -type f -name "*.rpm" -exec rm {} \;
+f_rpm_update_local_repo
+echo "done!"
+}
 
 
 ## NO ROOT MODE FUNCTIONS ##
@@ -684,7 +696,7 @@ f_noroot_ver_compare() {
     do
       read -rp "The latest version in the repo is ${V_DEB_VER} which is already installed. Continue? (y/n)" Q_NOROOT_SAME_VER
        case $Q_NOROOT_SAME_VER in
- 
+
         y ) echo "ok"
             break;;
 
@@ -819,6 +831,9 @@ elif [[ "${V_RUN_MODE}" == "remove-schedule" ]]; then
 elif [[ "${V_RUN_MODE}" == "noroot-uninstall" ]]; then
  f_logo
  f_noroot_uninstall
+elif [[ "${V_RUN_MODE}" == "clean-repo" ]]; then
+  f_logo
+  f_clean_repo
 fi
 }
 

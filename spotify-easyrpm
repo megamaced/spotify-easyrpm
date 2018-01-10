@@ -58,7 +58,7 @@ cat <<EOF
 EOF
 sleep 2
 cat <<EOF
-VERSION: 1.0.1
+VERSION: 1.1.0
 SUPPORT: https://github.com/megamaced/spotify-easyrpm/issues
 
 MODE: ${V_RUN_MODE}
@@ -109,6 +109,10 @@ root privileges to this script if you prefer
  ${V_SCRIPT_NAME} -remove-schedule
 
   - Removes the schedule and local repo if present
+
+ ${V_SCRIPT_NAME} -clean-repo
+
+  - Cleans up the local filesystem repo
 
 
 EOF
@@ -167,6 +171,8 @@ elif [[ "${V_OPTIONS}" == "-remove-schedule" ]]; then
 V_RUN_MODE="remove-schedule"
 elif [[ "${V_OPTIONS}" == "-noroot-uninstall" ]]; then
 V_RUN_MODE="noroot-uninstall"
+elif [[ "${V_OPTIONS}" == "-clean-repo" ]]; then
+V_RUN_MODE="clean-repo"
 elif [[ -z "${V_OPTIONS}" ]]; then
 V_RUN_MODE="prompt"
 else
@@ -438,11 +444,11 @@ EOF
 
 
 f_rpm_ver_compare() {
-echo "Comparing repo version to installed version (if any)"
+echo "Comparing debian repo version to installed or local machine repo version (if any)"
 f_set_deb_ver
-if [[ "$(rpm -q "${V_PKGNAME}" | cut -f3 -d"-")" == "${V_DEB_VER}" ]]; then
+if [[ "$(rpm -q "${V_PKGNAME}" | cut -f3 -d"-")" == "${V_DEB_VER}" ]] || [[ "$(find ${V_LOCAL_REPO} -type f -name "*.rpm" | sort | tail -n1 | cut -f4 -d"-")" == "${V_DEB_VER}" ]] ; then
  if [[ "${V_RUN_MODE}" != "prompt" ]]; then
-  echo "${V_DEB_VER} is already installed. Quitting"
+  echo "spotify-client ${V_DEB_VER} is already installed or available from local machine repo. Quitting"
   f_cleanup
   exit 0
  else
@@ -634,14 +640,20 @@ f_create_schedule
 
 
 f_rpm_update_local_repo() {
+if [[ "${V_RUN_MODE}" != "clean-repo" ]]; then
 echo "Moving RPMs from your rpmbuild ${V_RPMS_DIR} to your local repo ${V_LOCAL_REPO}"
 find "${V_RPMS_DIR}"/"${V_RPM_ARCH}"/ -name "${V_PKGNAME}"-*"${V_RPM_ARCH}".rpm -type f -exec mv -t "${V_LOCAL_REPO}" {} \+
+fi
 if ! createrepo "${V_LOCAL_REPO}"; then
- f_error "Failed to create local repo. Aborting"
+ f_error "Failed to create / update local repo. Aborting"
 fi
 }
 
-
+f_clean_repo() {
+sudo find "${V_LOCAL_REPO}" -type f -name "*.rpm" -exec rm {} \;
+f_rpm_update_local_repo
+echo "done!"
+}
 
 
 ## NO ROOT MODE FUNCTIONS ##
@@ -819,6 +831,9 @@ elif [[ "${V_RUN_MODE}" == "remove-schedule" ]]; then
 elif [[ "${V_RUN_MODE}" == "noroot-uninstall" ]]; then
  f_logo
  f_noroot_uninstall
+elif [[ "${V_RUN_MODE}" == "clean-repo" ]]; then
+  f_logo
+  f_clean_repo
 fi
 }
 

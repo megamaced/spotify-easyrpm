@@ -10,8 +10,8 @@ root privileges to this script if you prefer
 
 
  Features
- 
- * Set up a build enviornment on your PC and install rpm-build 
+
+ * Set up a build enviornment on your PC and install rpm-build
  * Auto download the latest version of Spotify
  * Convert the debian package to RPM format
  * Install the Spotify RPM
@@ -20,7 +20,7 @@ root privileges to this script if you prefer
  * Fully unattended mode (optional)
  * Install to home directory without root privileges
 
- 
+
  Howto
 
   spotify-easyrpm
@@ -53,12 +53,16 @@ root privileges to this script if you prefer
 
   - Removes the schedule and local repo if present
 
- 
+  spotify-easyrpm -clean-repo
+
+  - Cleans up the local filesystem repo
+
+
  Coming Soon!
 
  * Dependency warnings for noroot installs (If you installed spotify-easyrpm from OBS with recommends you will already have everything you need)
  * -localdeb - Use a local copy of a Spotify deb - Useful if you want to stick to a specific Spotify version (perhaps pre v1.0.x)
- 
+
 
  Requirements
 
@@ -72,4 +76,3 @@ root privileges to this script if you prefer
  * openSUSE 42.2 https://software.opensuse.org/ymp/home:megamaced/openSUSE_Leap_42.2/spotify-easyrpm.ymp?base=openSUSE%3ALeap%3A42.2&query=spotify-easyrpm
  * openSUSE 42.3 https://software.opensuse.org/ymp/home:megamaced/openSUSE_Leap_42.3/spotify-easyrpm.ymp?base=openSUSE%3ALeap%3A42.2&query=spotify-easyrpm
  * openSUSE Tumbleweed https://software.opensuse.org/ymp/home:megamaced/openSUSE_Tumbleweed/spotify-easyrpm.ymp?base=openSUSE%3AFactory&query=spotify-easyrpm
-

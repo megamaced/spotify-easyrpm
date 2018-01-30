@@ -60,6 +60,9 @@ root privileges to this script if you prefer
 
  Coming Soon!
 
+ * Fix NO ROOT desktop launcher if you don't have a $HOME/bin
+ * The Packman spotify installer causes problems for spotify-easyrpm. We'll try to detect and clean up those problems
+ * openSUSE 13.2 - Spotify now requires newer versions of mozilla-nspr and mozilla-nss. These are in home:megamaced. Spotify-easyrpm will automate those updates
  * Dependency warnings for noroot installs (If you installed spotify-easyrpm from OBS with recommends you will already have everything you need)
  * -localdeb - Use a local copy of a Spotify deb - Useful if you want to stick to a specific Spotify version (perhaps pre v1.0.x)
 

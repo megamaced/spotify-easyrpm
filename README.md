@@ -58,24 +58,14 @@ root privileges to this script if you prefer
   - Cleans up the local filesystem repo
 
 
- Coming Soon!
-
- * Fix NO ROOT desktop launcher if you don't have a $HOME/bin
- * The Packman spotify installer causes problems for spotify-easyrpm. We'll try to detect and clean up those problems
- * openSUSE 13.2 - Spotify now requires newer versions of mozilla-nspr and mozilla-nss. These are in home:megamaced. Spotify-easyrpm will automate those updates
- * Dependency warnings for noroot installs (If you installed spotify-easyrpm from OBS with recommends you will already have everything you need)
- * -localdeb - Use a local copy of a Spotify deb - Useful if you want to stick to a specific Spotify version (perhaps pre v1.0.x)
-
-
  Requirements
 
- * Regular RPM mode - openSUSE 13.2 or later, SLE 12 or later
+ * Regular RPM mode - Latest openSUSE Leap (x86_64), Tumbleweed (x86_64 or i586) or SLE (x86_64)
  * NO ROOT mode - Any recent Linux distribution should work (only SUSE distros tested)
 
 
  Download links (One Click Install)
 
- * openSUSE 42.1 https://software.opensuse.org/ymp/home:megamaced/openSUSE_Leap_42.1/spotify-easyrpm.ymp?base=openSUSE%3ALeap%3A42.1&query=spotify-easyrpm
- * openSUSE 42.2 https://software.opensuse.org/ymp/home:megamaced/openSUSE_Leap_42.2/spotify-easyrpm.ymp?base=openSUSE%3ALeap%3A42.2&query=spotify-easyrpm
- * openSUSE 42.3 https://software.opensuse.org/ymp/home:megamaced/openSUSE_Leap_42.3/spotify-easyrpm.ymp?base=openSUSE%3ALeap%3A42.2&query=spotify-easyrpm
- * openSUSE Tumbleweed https://software.opensuse.org/ymp/home:megamaced/openSUSE_Tumbleweed/spotify-easyrpm.ymp?base=openSUSE%3AFactory&query=spotify-easyrpm
+ * SLE 12 SP3 https://software.opensuse.org/ymp/home:megamaced:spotify-easyrpm/SLE_12_SP3/spotify-easyrpm.ymp?base=SUSE%3ASLE-12-SP3%3AGA&query=spotify-easyrpm
+ * openSUSE 42.3 https://software.opensuse.org/ymp/home:megamaced:spotify-easyrpm/openSUSE_Leap_42.3/spotify-easyrpm.ymp?base=openSUSE%3ALeap%3A42.3&query=spotify-easyrpm
+ * openSUSE Tumbleweed https://software.opensuse.org/ymp/home:megamaced:spotify-easyrpm/openSUSE_Tumbleweed/spotify-easyrpm.ymp?base=openSUSE%3AFactory&query=spotify-easyrpm

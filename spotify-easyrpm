@@ -718,11 +718,21 @@ f_create_schedule
 f_noroot_check_libcurl() {
   if [[ "${V_SYS_ARCH}" == i386 ]]; then
    if [[ ! -f /usr/lib/libcurl-gnutls.so.4 ]]; then
-     echo "Spotify now requires libcurl-gnutls.so.4 which is not present on SUSE. Please run sudo ln -s /usr/lib/libcurl.so.4 /usr/lib/libcurl-gnutls.so.4"
+     cat << EOF
+  Spotify now requires libcurl-gnutls.so.4 which is not present on SUSE.
+
+  Please run sudo ln -s /usr/lib/libcurl.so.4 /usr/lib/libcurl-gnutls.so.4
+
+EOF
    fi
  elif [[ "${V_SYS_ARCH}" == x86_64 ]]; then
    if [[ ! -f /usr/lib64/libcurl-gnutls.so.4 ]]; then
-     echo "Spotify now requires libcurl-gnutls.so.4 which is not present on SUSE. Please run sudo ln -s /usr/lib64/libcurl.so.4 /usr/lib64/libcurl-gnutls.so.4"
+     cat << EOF
+  Spotify now requires libcurl-gnutls.so.4 which is not present on SUSE.
+
+  Please run sudo ln -s /usr/lib64/libcurl.so.4 /usr/lib64/libcurl-gnutls.so.4
+
+EOF
    fi
  fi
 }

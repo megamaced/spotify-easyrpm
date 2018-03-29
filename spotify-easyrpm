@@ -58,7 +58,7 @@ cat <<EOF
 EOF
 sleep 2
 cat <<EOF
-VERSION: 1.1.1
+VERSION: 1.1.2
 SUPPORT: https://github.com/megamaced/spotify-easyrpm/issues
 The latest openSUSE Leap, Tumbleweed or SLE are supported only
 
@@ -300,7 +300,6 @@ fi
 
 f_schedule_prompt() {
 if [[ "${V_RUN_MODE}" == "noprompt" ]]; then
- V_SCHEDULE_FREQUENCY="weekly"
  f_rpm_create_schedule
 else
   echo "Checking for an existing schedule"
@@ -311,7 +310,7 @@ else
    read -rp "Do you wish to set up an automated update schedule (y/n)?" Q_SCHEDULE_ANSWER
 
   case $Q_SCHEDULE_ANSWER in
-  y ) V_ASK_SCHEDULE_FREQUENCY="yes"
+  y ) V_WANTS_SCHEDULE="yes"
    break;;
 
   n ) echo "Ok skipping...If you want to create this in the future just run ${V_SCRIPT_NAME} -create-schedule"
@@ -328,20 +327,7 @@ else
 fi
 fi
 
-if [[ "${V_ASK_SCHEDULE_FREQUENCY}" == "yes" ]]; then
-  while true
-  do
-   read -rp "How often do you want to check for updates (weekly/monthly)?" Q_SCHEDULE_FREQUENCY_ANSWER
-
-  case $Q_SCHEDULE_FREQUENCY_ANSWER in
-  weekly ) V_SCHEDULE_FREQUENCY="weekly"
-   break;;
-
-  monthly ) V_SCHEDULE_FREQUENCY="monthly"
-   break;;
-
-  esac
- done
+if [[ "${V_WANTS_SCHEDULE}" == "yes" ]]; then
  if [[ "${PREF_INSTALL_TYPE}" == "RPM" ]] || [[ "${V_RUN_MODE}" == "prompt" ]]; then
   echo "Detected RPM based installation"
   f_rpm_create_schedule
@@ -361,7 +347,7 @@ if ! crontab -l | grep "${V_SCRIPT_NAME} -scheduled"; then
  echo "Creating cron job in your crontab"
  crontab -l > "${V_TMP_CRON_FILE}"
  cat << EOF >> "${V_TMP_CRON_FILE}"
-@${V_SCHEDULE_FREQUENCY} /usr/bin/${V_SCRIPT_NAME} -scheduled
+@daily /usr/bin/${V_SCRIPT_NAME} -scheduled
 EOF
  if crontab "${V_TMP_CRON_FILE}"; then
   rm "${V_TMP_CRON_FILE}"
@@ -424,6 +410,19 @@ if ! rpm -q update-desktop-files > /dev/null 2>&1; then
 fi
 }
 
+f_rpm_check_libcurl() {
+  if [[ "${V_SYS_ARCH}" == i386 ]]; then
+   if [[ ! -f /usr/lib/libcurl-gnutls.so.4 ]]; then
+     echo "Spotify now requires libcurl-gnutls.so.4 which is not present on SUSE. Working around by symlinking libcurl.so.4..."
+     sudo ln -s /usr/lib/libcurl.so.4 /usr/lib/libcurl-gnutls.so.4
+   fi
+ elif [[ "${V_SYS_ARCH}" == x86_64 ]]; then
+   if [[ ! -f /usr/lib64/libcurl-gnutls.so.4 ]]; then
+     echo "Spotify now requires libcurl-gnutls.so.4 which is not present on SUSE. Working around by symlinking libcurl.so.4..."
+     sudo ln -s /usr/lib64/libcurl.so.4 /usr/lib64/libcurl-gnutls.so.4
+   fi
+ fi
+}
 
 f_rpm_prepare_src() {
 echo "Preparing RPM src tarball"
@@ -716,6 +715,27 @@ f_noroot_create_schedule() {
 f_create_schedule
 }
 
+f_noroot_check_libcurl() {
+  if [[ "${V_SYS_ARCH}" == i386 ]]; then
+   if [[ ! -f /usr/lib/libcurl-gnutls.so.4 ]]; then
+     cat << EOF
+  Spotify now requires libcurl-gnutls.so.4 which is not present on SUSE.
+
+  Please run sudo ln -s /usr/lib/libcurl.so.4 /usr/lib/libcurl-gnutls.so.4
+
+EOF
+   fi
+ elif [[ "${V_SYS_ARCH}" == x86_64 ]]; then
+   if [[ ! -f /usr/lib64/libcurl-gnutls.so.4 ]]; then
+     cat << EOF
+  Spotify now requires libcurl-gnutls.so.4 which is not present on SUSE.
+
+  Please run sudo ln -s /usr/lib64/libcurl.so.4 /usr/lib64/libcurl-gnutls.so.4
+
+EOF
+   fi
+ fi
+}
 
 f_noroot_install() {
   echo "Installing Spotify to your homedir"
@@ -793,6 +813,7 @@ if [[ "${V_RUN_MODE}" == *prompt ]]; then
  f_logo
  f_install_check
  f_rpm_install_build_deps
+ f_rpm_check_libcurl
  f_create_local_build_dirs
  f_rpm_ver_compare
  f_download
@@ -810,6 +831,7 @@ elif [[ "${V_RUN_MODE}" == "noroot" ]]; then
  f_download
  f_extract_deb
  f_noroot_install
+ f_noroot_check_libcurl
  f_schedule_prompt
 elif [[ "${V_RUN_MODE}" == "scheduled" ]]; then
  if [[ "${PREF_INSTALL_TYPE}" == "NOROOT" ]]; then

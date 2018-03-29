@@ -15,7 +15,7 @@ root privileges to this script if you prefer
  * Auto download the latest version of Spotify
  * Convert the debian package to RPM format
  * Install the Spotify RPM
- * Set up a weekly or monthly automated updated schedule via cron job (optional)
+ * Automated updated schedule via cron job (optional)
  * Create a local filesystem repo so Spotify can be updated alongside regular updates (optional)
  * Fully unattended mode (optional)
  * Install to home directory without root privileges
@@ -31,7 +31,7 @@ root privileges to this script if you prefer
 
   - Create the RPM
   - Install the Spotify RPM
-  - Set up a weekly scheduled update job
+  - Set up a scheduled update job
   - Set up a local filesystem repo
 
   spotify-easyrpm -noroot

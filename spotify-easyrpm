@@ -324,6 +324,7 @@ else
  fi
 else
   echo "Found existing schedule. Skipping"
+  f_rpm_update_local_repo
 fi
 fi
 

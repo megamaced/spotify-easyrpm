@@ -66,8 +66,7 @@ root privileges to this script if you prefer
 
  Download links (One Click Install)
 
- * SLE 12 SP3 https://software.opensuse.org/ymp/home:megamaced:spotify-easyrpm/SLE_12_SP3/spotify-easyrpm.ymp?base=SUSE%3ASLE-12-SP3%3AGA&query=spotify-easyrpm
- * openSUSE 42.3 https://software.opensuse.org/ymp/home:megamaced:spotify-easyrpm/openSUSE_Leap_42.3/spotify-easyrpm.ymp?base=openSUSE%3ALeap%3A42.3&query=spotify-easyrpm
+ * SLE 15 https://software.opensuse.org/ymp/home:megamaced:spotify-easyrpm/openSUSE_Leap_15.0/spotify-easyrpm.ymp?base=openSUSE%3ALeap%3A15.0&query=spotify-easyrpm
  * openSUSE 15.0
  https://software.opensuse.org/ymp/home:megamaced:spotify-easyrpm/openSUSE_Leap_15.0/spotify-easyrpm.ymp?base=openSUSE%3ALeap%3A15.0&query=spotify-easyrpm
  * openSUSE Tumbleweed https://software.opensuse.org/ymp/home:megamaced:spotify-easyrpm/openSUSE_Tumbleweed/spotify-easyrpm.ymp?base=openSUSE%3AFactory&query=spotify-easyrpm

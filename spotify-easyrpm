@@ -58,7 +58,7 @@ cat <<EOF
 EOF
 sleep 2
 cat <<EOF
-VERSION: 1.1.5
+VERSION: 1.1.5b
 SUPPORT: https://github.com/megamaced/spotify-easyrpm/issues
 The latest openSUSE Leap, Tumbleweed or SLE are supported only
 
@@ -508,7 +508,11 @@ Requires: mozilla-nss
 Requires: libudev1
 Requires: libX11-6
 Requires: libXtst6
+%if 0%{?sle_version} <= 150000 && 0%{?is_opensuse} || 0%{?sle_version} <= 150000 && !0%{?is_opensuse}
+Requires: libopenssl1_0_0
+%else
 Requires: libopenssl1_1
+%endif
 Requires: xdg-utils
 Recommends: libavcodec56
 Recommends: libavformat56

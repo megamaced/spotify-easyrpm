@@ -1,5 +1,6 @@
 # spotify-easyrpm
 
+![img](https://i.imgur.com/y0tDlYD.png)
 
 Spotify-easyrpm is a script which can download the latest debian package from the Spotify
 repository and convert it into an RPM. It is also capable of installing, scheduling and storing

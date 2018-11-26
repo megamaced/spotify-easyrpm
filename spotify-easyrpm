@@ -34,6 +34,7 @@ V_HTTP_REPO="http://repository.spotify.com/pool/non-free/s/${V_PKGNAME}/"
 V_SOURCES_DIR="${HOME}/rpmbuild/SOURCES"
 V_SPECS_DIR="${HOME}/rpmbuild/SPECS"
 V_RPMS_DIR="${HOME}/rpmbuild/RPMS"
+V_BUILDROOT_DIR="${HOME}/rpmbuild/BUILDROOT"
 
 V_TMP_CRON_FILE="${HOME}/${V_SCRIPT_NAME}.tmp"
 V_LOCAL_REPO="/var/cache/${V_SCRIPT_NAME}"
@@ -58,7 +59,7 @@ cat <<EOF
 EOF
 sleep 2
 cat <<EOF
-VERSION: 1.1.5
+VERSION: 1.1.6
 SUPPORT: https://github.com/megamaced/spotify-easyrpm/issues
 The latest openSUSE Leap, Tumbleweed or SLE are supported only
 
@@ -135,6 +136,7 @@ rm "${V_SOURCES_DIR}"/index.html > /dev/null 2>&1
 rm "${V_SOURCES_DIR}"/data.tar.gz > /dev/null 2>&1
 rm -r "${V_SOURCES_DIR:?}"/usr > /dev/null 2>&1
 rm -r "${V_SOURCES_DIR:?}"/"${V_PKGNAME}"* > /dev/null 2>&1
+rm -r "${V_BUILDROOT_DIR:?}"/"${V_PKGNAME}"* > /dev/null 2>&1
 echo "done"
 }
 

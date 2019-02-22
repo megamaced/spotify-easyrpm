@@ -536,7 +536,7 @@ while [ "$1" != "" ]; do
                         f_schedule_prompt
                         break
                         ;;
-    --scheduled )       V_RUN_MODE="scheduled"
+    --scheduled | -scheduled )  V_RUN_MODE="scheduled"
                         f_ver_compare
                         f_download
                         f_extract_deb

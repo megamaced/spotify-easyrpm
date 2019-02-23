@@ -28,6 +28,7 @@ V_LOCAL_REPO="/var/cache/${V_PRG_NAME}"
 
 
 f_logo() {
+clear
 cat <<EOF
 
 ┌─┐┌─┐┌─┐┌┬┐┬┌─┐┬ ┬   ┌─┐┌─┐┌─┐┬ ┬┬─┐┌─┐┌┬┐

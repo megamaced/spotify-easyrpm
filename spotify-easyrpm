@@ -23,7 +23,7 @@ V_SPECS_DIR="${HOME}/rpmbuild/SPECS"
 V_RPMS_DIR="${HOME}/rpmbuild/RPMS"
 V_BUILDROOT_DIR="${HOME}/rpmbuild/BUILDROOT"
 
-V_TMP_CRON_FILE="${HOME}/${V_PRG_NAME}.tmp"
+SYSTEMD_UNIT="${HOME}/.local/share/systemd/user/${V_PRG_NAME}.service"
 V_LOCAL_REPO="/var/cache/${V_PRG_NAME}"
 
 
@@ -198,7 +198,7 @@ if [[ "${V_RUN_MODE}" == "quiet" ]]; then
  f_create_schedule
 else
   echo "Checking for an existing schedule"
- if ! crontab -l | grep "${V_PRG_NAME} -scheduled"; then
+ if [[ ! -f "${SYSTEMD_UNIT}" ]]; then
   if [[ "${V_RUN_MODE}" == "create-schedule" ]] || [[ "${PREF_PROMPT_SCHEDULE}" != "NO" ]]; then
   while true
   do
@@ -227,12 +227,13 @@ fi
 
 
 f_remove_schedule() {
- if crontab -l | grep "${V_PRG_NAME} -scheduled"; then
-  echo "Removing ${V_PRG_NAME} from your crontab"
-  crontab -l | grep -v "${V_PRG_NAME} -scheduled" > "${V_TMP_CRON_FILE}"
-  crontab "${V_TMP_CRON_FILE}"
-  rm "${V_TMP_CRON_FILE}"
+ if [[ -f "${SYSTEMD_UNIT}" ]]; then
+  echo "Removing ${V_PRG_NAME} from your systemd unit files"
+  rm "${SYSTEMD_UNIT}"
  fi
+}
+
+f_remove_repo()
  if [[ -f /etc/zypp/repos.d/${V_PRG_NAME}.repo ]]; then
   echo "Removing ${V_PRG_NAME} zypper repo"
   sudo zypper rr "${V_PRG_NAME}"
@@ -479,20 +480,22 @@ fi
 }
 
 f_create_schedule() {
-if ! crontab -l | grep "${V_PRG_NAME} -scheduled"; then
- echo "Creating cron job in your crontab"
- crontab -l > "${V_TMP_CRON_FILE}"
- cat << EOF >> "${V_TMP_CRON_FILE}"
-@daily /usr/bin/${V_PRG_NAME} -scheduled
+if [[ ! -f "${SYSTEMD_UNIT}" ]]; then
+ echo "Creating automated Spotify builds"
+ cat << EOF >> "${SYSTEMD_UNIT}"
+[Unit]                                                                                                                                                                                                        
+Description="${V_PRG_NAME}" scheduler                                                                                                                                                                         
+                                                                                                                                                                                                              
+[Service]                                                                                                                                                                                                     
+ExecStart=/usr/bin/"${V_PRG_NAME}" --scheduled                                                                                                                                                                
+                                                                                                                                                                                                              
+[Install]                                                                                                                                                                                                     
+WantedBy=default.target                                                                                                                                                                                       
+                        
 EOF
- if crontab "${V_TMP_CRON_FILE}"; then
-  rm "${V_TMP_CRON_FILE}"
   sed -i "s/\(PREF_PROMPT_SCHEDULE=\)\(.*\)/\1YES/" "${V_CONFIG_FILE}"
- else
-  rm "${V_TMP_CRON_FILE}"
-  f_error "Failed to create cron job in your crontab"
- fi
 fi
+systemctl --user enable "${V_PRG_NAME}"
 f_script_location_check
 }
 
@@ -554,6 +557,7 @@ while [ "$1" != "" ]; do
     --remove-schedule ) V_RUN_MODE="remove-schedule"
                         f_logo
                         f_remove_schedule
+                        f_remove_repo
                         break
                         ;;
     --clean-repo )      V_RUN_MODE="clean-repo"

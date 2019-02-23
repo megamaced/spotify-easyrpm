@@ -49,7 +49,6 @@ EOF
 
 
 f_help() {
-clear
 cat <<EOF
 
 ${V_PRG_NAME} is a script which can download the latest debian package from the Spotify
@@ -103,36 +102,36 @@ rm -r "${V_BUILDROOT_DIR:?}"/"${V_PKGNAME}"* > /dev/null 2>&1
 
 
 f_root_check() {
-if [[ "$(id -u)" == "0" ]]; then
- f_error "Do not run as root"
-fi
+ if [[ "$(id -u)" == "0" ]]; then
+  f_error "Do not run as root"
+ fi
 }
 
 
 f_arch_check() {
-if [[ "${V_SYS_ARCH}" == i386 ]]; then
- V_DEB_ARCH=i386
- V_RPM_ARCH=i586
-elif [[ "${V_SYS_ARCH}" == x86_64 ]]; then
- V_DEB_ARCH=amd64
- V_RPM_ARCH=x86_64
-else
- f_error "Unsupported architecture. Aborting"
-fi
+ if [[ "${V_SYS_ARCH}" == i386 ]]; then
+  V_DEB_ARCH=i386
+  V_RPM_ARCH=i586
+ elif [[ "${V_SYS_ARCH}" == x86_64 ]]; then
+  V_DEB_ARCH=amd64
+  V_RPM_ARCH=x86_64
+ else
+  f_error "Unsupported architecture. Aborting"
+ fi
 }
 
 
 f_config() {
-  if [ -f "${V_CONFIG_FILE}" ]; then
-    source "${V_CONFIG_FILE}"
-  else
-    cat << EOF > "${V_CONFIG_FILE}"
+ if [ -f "${V_CONFIG_FILE}" ]; then
+  source "${V_CONFIG_FILE}"
+ else
+  cat << EOF > "${V_CONFIG_FILE}"
 
 # PREFS
 PREF_PROMPT_SCHEDULE=YES
 
 EOF
-fi
+ fi
 }
 
 
@@ -150,7 +149,7 @@ V_DEB_VER="$(echo $V_REPO_LATEST_DEB | cut -f2 -d"_" | cut -f1 -d"-")"
 }
 
 
-f_create_local_build_dirs() {
+f_create_rpmbuild_dirs() {
 echo "Creating build dirs in ${HOME}/rpmbuild"
 if ! mkdir -p "${HOME}"/rpmbuild/{BUILD,BUILDROOT,OTHER,RPMS,SOURCES,SPECS,SRPMS}; then
 f_error "Failed to create rpmbuild root. Aborting"
@@ -164,8 +163,7 @@ if [[ ! -z "${V_RPMBUILD_OWNER_CHECK}" ]]; then
 fi
 if [[ ! -f "${HOME}"/.rpmmacros ]]; then
   if [[ -z "${USER}" ]]; then
-    echo "USER variable is unset. Please set USER to your username and run again"
-    exit 1
+    f_error "USER variable is unset. Please set USER to your username and run again"
   fi
  echo "Creating ${HOME}/.rpmmacros"
  cat << EOF >> "${HOME}"/.rpmmacros
@@ -196,12 +194,7 @@ fi
 
 
 f_schedule_prompt() {
-if [[ "${V_RUN_MODE}" == "quiet" ]]; then
- f_create_repo
- f_create_schedule
- f_script_location_check
-else
-  echo "Checking for an existing schedule"
+echo "Checking for an existing schedule"
  if [[ ! -f "${SYSTEMD_UNIT}" ]]; then
   if [[ "${V_RUN_MODE}" == "create-schedule" ]] || [[ "${PREF_PROMPT_SCHEDULE}" != "NO" ]]; then
   while true
@@ -210,7 +203,7 @@ else
 
   case $Q_SCHEDULE_ANSWER in
   y ) f_create_repo
-      f_create_schedule
+      f_create_systemd_unit
       f_script_location_check
       break;;
 
@@ -225,8 +218,7 @@ else
  fi
 else
   echo "Found existing schedule. Skipping"
-  f_rpm_update_local_repo
-fi
+  f_update_local_repo
 fi
 }
 
@@ -234,6 +226,7 @@ fi
 f_remove_schedule() {
  if [[ -f "${SYSTEMD_UNIT}" ]]; then
   echo "Removing ${V_PRG_NAME} from your systemd unit files"
+  systemctl --user disable spotify-easyrpm
   rm "${SYSTEMD_UNIT}"
  fi
 }
@@ -268,7 +261,6 @@ f_prepare_src() {
 echo "Preparing RPM src tarball"
 mkdir -p "${V_SOURCES_DIR}"/"${V_PKGNAME}"/usr/share/applications
 f_desktop_entry
-f_set_deb_ver
 tar czf "${V_SOURCES_DIR}"/"${V_PKGNAME}"-"${V_DEB_VER}".tar.gz -C "${V_SOURCES_DIR}"/ "${V_PKGNAME}"
 }
 
@@ -292,7 +284,6 @@ EOF
 
 f_ver_compare() {
 echo "Comparing debian repo version to installed or local machine repo version (if any)"
-f_set_deb_ver
 if [[ "$(rpm -q "${V_PKGNAME}" | cut -f3 -d"-")" == "${V_DEB_VER}" ]] || [[ "$(find ${V_LOCAL_REPO} -type f -name "*.rpm" | sort | tail -n1 | cut -f4 -d"-")" == "${V_DEB_VER}" ]] ; then
  if [[ "${V_RUN_MODE}" != "prompt" ]]; then
   echo "spotify-client ${V_DEB_VER} is already installed or available from local machine repo. Quitting"
@@ -475,7 +466,7 @@ fi
 if ! sudo find ${V_LOCAL_REPO} -type f -exec chmod 666 {} \+; then
  f_error "Failed to chmod ${V_LOCAL_REPO}"
 fi
-f_rpm_update_local_repo
+f_update_local_repo
 if [[ ! -f /etc/zypp/repos.d/${V_PRG_NAME}.repo ]]; then
  echo "Adding local file system repository to zypper"
  if ! sudo zypper ar -G --refresh "${V_LOCAL_REPO}" "${V_PRG_NAME}"; then
@@ -484,7 +475,7 @@ if [[ ! -f /etc/zypp/repos.d/${V_PRG_NAME}.repo ]]; then
 fi
 }
 
-f_create_schedule() {
+f_create_systemd_unit() {
 if [[ ! -f "${SYSTEMD_UNIT}" ]]; then
  echo "Creating automated Spotify builds"
  mkdir -p "${SYSTEMD_UNIT_DIR}"
@@ -505,7 +496,7 @@ systemctl --user enable "${V_PRG_NAME}"
 }
 
 
-f_rpm_update_local_repo() {
+f_update_local_repo() {
 if [[ "${V_RUN_MODE}" != "clean-repo" ]]; then
 echo "Moving RPMs from your rpmbuild ${V_RPMS_DIR} to your local repo ${V_LOCAL_REPO}"
 find "${V_RPMS_DIR}"/"${V_RPM_ARCH}"/ -name "${V_PKGNAME}"-*"${V_RPM_ARCH}".rpm -type f -exec mv -t "${V_LOCAL_REPO}" {} \+
@@ -517,7 +508,7 @@ fi
 
 f_clean_repo() {
 sudo find "${V_LOCAL_REPO}" -type f -name "*.rpm" -exec rm {} \;
-f_rpm_update_local_repo
+f_update_local_repo
 echo "done!"
 }
 
@@ -533,7 +524,8 @@ while [ "$1" != "" ]; do
     --quiet )           V_RUN_MODE="quiet"
                         f_logo
                         f_install_build_deps
-                        f_create_local_build_dirs
+                        f_create_rpmbuild_dirs
+                        f_set_deb_ver
                         f_ver_compare
                         f_download
                         f_extract_deb
@@ -541,17 +533,20 @@ while [ "$1" != "" ]; do
                         f_rpm_spec
                         f_run_build
                         f_install_prompt
-                        f_schedule_prompt
+                        f_create_repo
+                        f_create_systemd_unit
+                        f_script_location_check
                         break
                         ;;
     --scheduled | -scheduled )  V_RUN_MODE="scheduled"
+                        f_set_deb_ver
                         f_ver_compare
                         f_download
                         f_extract_deb
                         f_prepare_src
                         f_rpm_spec
                         f_run_build
-                        f_rpm_update_local_repo
+                        f_update_local_repo
                         break
                         ;;
     --create-schedule ) V_RUN_MODE="create-schedule"
@@ -581,7 +576,8 @@ if [[ -z "${V_RUN_MODE}" ]]; then
 V_RUN_MODE="prompt"
  f_logo
  f_install_build_deps
- f_create_local_build_dirs
+ f_create_rpmbuild_dirs
+ f_set_deb_ver
  f_ver_compare
  f_download
  f_extract_deb

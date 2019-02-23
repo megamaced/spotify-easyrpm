@@ -234,7 +234,7 @@ f_remove_schedule() {
  fi
 }
 
-f_remove_repo()
+f_remove_repo() {
  if [[ -f /etc/zypp/repos.d/${V_PRG_NAME}.repo ]]; then
   echo "Removing ${V_PRG_NAME} zypper repo"
   sudo zypper rr "${V_PRG_NAME}"

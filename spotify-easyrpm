@@ -186,7 +186,7 @@ mv "${V_SOURCES_DIR}"/usr "${V_SOURCES_DIR}"/"${V_PKGNAME}"/
 
 
 f_script_location_check() {
-if [[ ! -f /usr/bin/"${V_PRG_NAME}" ]]; then
+if [[ ! -f /usr/bin/"${V_PRG_NAME}" ]] || ! diff ${0} /usr/bin/"${V_PRG_NAME}" > /dev/null 2>&1; then
  echo "Copying ${V_PRG_NAME} to /usr/bin/${V_PRG_NAME} for the schedule to work"
  sudo cp ${0} /usr/bin/"${V_PRG_NAME}"
 fi

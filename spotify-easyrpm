@@ -23,7 +23,8 @@ V_SPECS_DIR="${HOME}/rpmbuild/SPECS"
 V_RPMS_DIR="${HOME}/rpmbuild/RPMS"
 V_BUILDROOT_DIR="${HOME}/rpmbuild/BUILDROOT"
 
-SYSTEMD_UNIT="${HOME}/.local/share/systemd/user/${V_PRG_NAME}.service"
+SYSTEMD_UNIT_DIR="${HOME}/.local/share/systemd/user"
+SYSTEMD_UNIT="${SYSTEMD_UNIT_DIR}/${V_PRG_NAME}.service"
 V_LOCAL_REPO="/var/cache/${V_PRG_NAME}"
 
 
@@ -486,6 +487,7 @@ fi
 f_create_schedule() {
 if [[ ! -f "${SYSTEMD_UNIT}" ]]; then
  echo "Creating automated Spotify builds"
+ mkdir -p "${SYSTEMD_UNIT_DIR}"
  cat << EOF >> "${SYSTEMD_UNIT}"
 [Unit]                                                                                                                                                                                                        
 Description="${V_PRG_NAME}" scheduler                                                                                                                                                                         

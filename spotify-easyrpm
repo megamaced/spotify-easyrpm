@@ -4,27 +4,14 @@
 # repository and convert it into an RPM. It is also capable of installing, scheduling and storing
 # the RPMs in a local filesystem repo for installing Spotify updates alongside regular system updates
 #
-# Alternatively Spotify can be installed and run from your home folder which does not require you to give
-# root privileges to this script if you prefer
-#
 # Run "spotify-easyrpm --help" for more info
 #
-
-
 
 #set -x
 
 
-
-## VARIABLES ##
-
-
-
-
-V_OPTIONS="${1}"
-
-V_SCRIPT_NAME="spotify-easyrpm"
-V_CONFIG_FILE="${HOME}/.${V_SCRIPT_NAME}"
+V_PRG_NAME="spotify-easyrpm"
+V_CONFIG_FILE="${HOME}/.${V_PRG_NAME}"
 
 V_SYS_ARCH="$(uname -i)"
 
@@ -36,20 +23,13 @@ V_SPECS_DIR="${HOME}/rpmbuild/SPECS"
 V_RPMS_DIR="${HOME}/rpmbuild/RPMS"
 V_BUILDROOT_DIR="${HOME}/rpmbuild/BUILDROOT"
 
-V_TMP_CRON_FILE="${HOME}/${V_SCRIPT_NAME}.tmp"
-V_LOCAL_REPO="/var/cache/${V_SCRIPT_NAME}"
-
-V_NOROOT_INSTALL_DIR="${HOME}/.local/${V_PKGNAME}"
-
-
-
-
-## SHARED FUNCTIONS ##
-
-
+SYSTEMD_UNIT_DIR="${HOME}/.local/share/systemd/user"
+SYSTEMD_UNIT="${SYSTEMD_UNIT_DIR}/${V_PRG_NAME}.service"
+V_LOCAL_REPO="/var/cache/${V_PRG_NAME}"
 
 
 f_logo() {
+clear
 cat <<EOF
 
 ┌─┐┌─┐┌─┐┌┬┐┬┌─┐┬ ┬   ┌─┐┌─┐┌─┐┬ ┬┬─┐┌─┐┌┬┐
@@ -59,7 +39,7 @@ cat <<EOF
 EOF
 sleep 2
 cat <<EOF
-VERSION: 1.1.6
+VERSION: 2.0.0
 SUPPORT: https://github.com/megamaced/spotify-easyrpm/issues
 The latest openSUSE Leap, Tumbleweed or SLE are supported only
 
@@ -69,57 +49,39 @@ EOF
 
 
 f_help() {
-clear
-if [[ "${V_OPTIONS}" == "-h" ]] || [[ "${V_OPTIONS}" == *help ]]; then
-V_RUN_MODE="help"
-f_logo
 cat <<EOF
 
-${V_SCRIPT_NAME} is a script which can download the latest debian package from the Spotify
+${V_PRG_NAME} is a script which can download the latest debian package from the Spotify
 repository and convert it into an RPM. It is also capable of installing, scheduling and storing
 the RPMs in a local filesystem repo for installing Spotify updates alongside regular system updates
 
-Alternatively Spotify can be installed and run from your home folder which does not require you to give
-root privileges to this script if you prefer
 
- ${V_SCRIPT_NAME}
+ ${V_PRG_NAME}
 
   - Regular prompt based mode to create an RPM and optionally install and create an update schedule
 
- ${V_SCRIPT_NAME} -noprompt
+ ${V_PRG_NAME} --quiet
 
   - Create the RPM
   - Install the Spotify RPM
-  - Set up a weekly scheduled update job
+  - Set up a daily scheduled update job
   - Set up a local filesystem repo
 
- ${V_SCRIPT_NAME} -noroot
-
-  - In this mode spotify-easyrpm will not require root/sudo
-  - Spotify will run from your home folder
-  - Schedule automatic updates (optional)
-  - Not currently compatible with -noprompt mode
-
- ${V_SCRIPT_NAME} -noroot-uninstall
-
-  - Removes Spotify from your homedir
-
- ${V_SCRIPT_NAME} -create-schedule
+ ${V_PRG_NAME} --create-schedule
 
   - If you previously opted out creating an automated update schedule but now desire it
 
- ${V_SCRIPT_NAME} -remove-schedule
+ ${V_PRG_NAME} --remove-schedule
 
   - Removes the schedule and local repo if present
 
- ${V_SCRIPT_NAME} -clean-repo
+ ${V_PRG_NAME} --clean-repo
 
-  - Cleans up the local filesystem repo
+  - Cleans up old versions from the local filesystem repo
 
 
 EOF
  exit 0
-fi
 }
 
 
@@ -131,114 +93,45 @@ exit 1
 
 
 f_cleanup() {
-echo "Cleaning up"
 rm "${V_SOURCES_DIR}"/index.html > /dev/null 2>&1
 rm "${V_SOURCES_DIR}"/data.tar.gz > /dev/null 2>&1
 rm -r "${V_SOURCES_DIR:?}"/usr > /dev/null 2>&1
 rm -r "${V_SOURCES_DIR:?}"/"${V_PKGNAME}"* > /dev/null 2>&1
 rm -r "${V_BUILDROOT_DIR:?}"/"${V_PKGNAME}"* > /dev/null 2>&1
-echo "done"
 }
 
 
 f_root_check() {
-if [[ "$(id -u)" == "0" ]]; then
- f_error "Do not run as root"
-fi
+ if [[ "$(id -u)" == "0" ]]; then
+  f_error "Do not run as root"
+ fi
 }
 
 
 f_arch_check() {
-if [[ "${V_SYS_ARCH}" == i386 ]]; then
- V_DEB_ARCH=i386
- V_RPM_ARCH=i586
-elif [[ "${V_SYS_ARCH}" == x86_64 ]]; then
- V_DEB_ARCH=amd64
- V_RPM_ARCH=x86_64
-else
- f_error "Unsupported architecture. Aborting"
-fi
-}
-
-
-f_mode_check() {
-if [[ "${V_OPTIONS}" == "-noprompt" ]]; then
-V_RUN_MODE="noprompt"
-elif [[ "${V_OPTIONS}" == "-scheduled" ]]; then
-V_RUN_MODE="scheduled"
-elif [[ "${V_OPTIONS}" == "-noroot" ]]; then
-V_RUN_MODE="noroot"
-elif [[ "${V_OPTIONS}" == "-create-schedule" ]]; then
-V_RUN_MODE="create-schedule"
-elif [[ "${V_OPTIONS}" == "-remove-schedule" ]]; then
-V_RUN_MODE="remove-schedule"
-elif [[ "${V_OPTIONS}" == "-noroot-uninstall" ]]; then
-V_RUN_MODE="noroot-uninstall"
-elif [[ "${V_OPTIONS}" == "-clean-repo" ]]; then
-V_RUN_MODE="clean-repo"
-elif [[ -z "${V_OPTIONS}" ]]; then
-V_RUN_MODE="prompt"
-else
-  V_RUN_MODE="invalid"
-  f_logo
-  echo "Unrecognised option. Run -help for more info"
-  exit 1
-fi
+ if [[ "${V_SYS_ARCH}" == i386 ]]; then
+  V_DEB_ARCH=i386
+  V_RPM_ARCH=i586
+ elif [[ "${V_SYS_ARCH}" == x86_64 ]]; then
+  V_DEB_ARCH=amd64
+  V_RPM_ARCH=x86_64
+ else
+  f_error "Unsupported architecture. Aborting"
+ fi
 }
 
 
 f_config() {
-  if [ -f "${V_CONFIG_FILE}" ]; then
-    source "${V_CONFIG_FILE}"
-  else
-    cat << EOF > "${V_CONFIG_FILE}"
+ if [ -f "${V_CONFIG_FILE}" ]; then
+  source "${V_CONFIG_FILE}"
+ else
+  cat << EOF > "${V_CONFIG_FILE}"
 
 # PREFS
 PREF_PROMPT_SCHEDULE=YES
-PREF_INSTALL_TYPE=
-
-# NO ROOT CONFIG
-V_NOROOT_INSTALLED_VER=
 
 EOF
-fi
-}
-
-
-f_install_check() {
- if [[ "${V_RUN_MODE}" == *prompt ]]; then
-  if [[ "${PREF_INSTALL_TYPE}" == "NOROOT" ]]; then
-    while true
-    do
-      read -rp "You are in RPM mode but you have a NOROOT install. Continue? (y/n)" Q_CONTINUE_MODE_CONFLICT
-      case $Q_CONTINUE_MODE_CONFLICT in
-
-      y ) echo "ok"
-      break;;
-
-      n ) echo "bye"
-      exit;;
-
-    esac
-   done
-  fi
- elif [[ "${V_RUN_MODE}" == "noroot" ]]; then
-  if [[ "${PREF_INSTALL_TYPE}" == "RPM" ]]; then
-   while true
-    do
-      read -rp "You are in NOROOT mode but you have an RPM install. Continue? (y/n)" Q_CONTINUE_MODE_CONFLICT
-      case $Q_CONTINUE_MODE_CONFLICT in
-
-      y ) echo "ok"
-      break;;
-
-      n ) echo "bye"
-      exit;;
-
-    esac
-  done
  fi
-fi
 }
 
 
@@ -256,7 +149,7 @@ V_DEB_VER="$(echo $V_REPO_LATEST_DEB | cut -f2 -d"_" | cut -f1 -d"-")"
 }
 
 
-f_create_local_build_dirs() {
+f_create_rpmbuild_dirs() {
 echo "Creating build dirs in ${HOME}/rpmbuild"
 if ! mkdir -p "${HOME}"/rpmbuild/{BUILD,BUILDROOT,OTHER,RPMS,SOURCES,SPECS,SRPMS}; then
 f_error "Failed to create rpmbuild root. Aborting"
@@ -270,12 +163,11 @@ if [[ ! -z "${V_RPMBUILD_OWNER_CHECK}" ]]; then
 fi
 if [[ ! -f "${HOME}"/.rpmmacros ]]; then
   if [[ -z "${USER}" ]]; then
-    echo "USER variable is unset. Please set USER to your username and run again"
-    exit 1
+    f_error "USER variable is unset. Please set USER to your username and run again"
   fi
  echo "Creating ${HOME}/.rpmmacros"
  cat << EOF >> "${HOME}"/.rpmmacros
-# Generated by ${V_SCRIPT_NAME}
+# Generated by ${V_PRG_NAME}
 %_topdir /home/${USER}/rpmbuild
 EOF
 fi
@@ -294,30 +186,30 @@ mv "${V_SOURCES_DIR}"/usr "${V_SOURCES_DIR}"/"${V_PKGNAME}"/
 
 
 f_script_location_check() {
-if [[ ! -f /usr/bin/"${V_SCRIPT_NAME}" ]]; then
- echo "Please move ${V_SCRIPT_NAME} to /usr/bin/${V_SCRIPT_NAME} for the schedule to work"
+if [[ ! -f /usr/bin/"${V_PRG_NAME}" ]] || ! diff ${0} /usr/bin/"${V_PRG_NAME}" > /dev/null 2>&1; then
+ echo "Copying ${V_PRG_NAME} to /usr/bin/${V_PRG_NAME} for the schedule to work"
+ sudo cp ${0} /usr/bin/"${V_PRG_NAME}"
 fi
 }
 
 
 f_schedule_prompt() {
-if [[ "${V_RUN_MODE}" == "noprompt" ]]; then
- f_rpm_create_schedule
-else
-  echo "Checking for an existing schedule"
- if ! crontab -l | grep "${V_SCRIPT_NAME} -scheduled"; then
+echo "Checking for an existing schedule"
+ if [[ ! -f "${SYSTEMD_UNIT}" ]]; then
   if [[ "${V_RUN_MODE}" == "create-schedule" ]] || [[ "${PREF_PROMPT_SCHEDULE}" != "NO" ]]; then
   while true
   do
    read -rp "Do you wish to set up an automated update schedule (y/n)?" Q_SCHEDULE_ANSWER
 
   case $Q_SCHEDULE_ANSWER in
-  y ) V_WANTS_SCHEDULE="yes"
-   break;;
+  y ) f_create_repo
+      f_create_systemd_unit
+      f_script_location_check
+      break;;
 
-  n ) echo "Ok skipping...If you want to create this in the future just run ${V_SCRIPT_NAME} -create-schedule"
+  n ) echo "Ok skipping...If you want to create this in the future just run ${V_PRG_NAME} -create-schedule"
       sed -i "s/\(PREF_PROMPT_SCHEDULE=\)\(.*\)/\1NO/" "${V_CONFIG_FILE}"
-   break;;
+      break;;
 
   esac
  done
@@ -326,79 +218,31 @@ else
  fi
 else
   echo "Found existing schedule. Skipping"
-  f_rpm_update_local_repo
+  f_update_local_repo
 fi
-fi
-
-if [[ "${V_WANTS_SCHEDULE}" == "yes" ]]; then
- if [[ "${PREF_INSTALL_TYPE}" == "RPM" ]] || [[ "${V_RUN_MODE}" == "prompt" ]]; then
-  echo "Detected RPM based installation"
-  f_rpm_create_schedule
- elif [[ "${PREF_INSTALL_TYPE}" == "NOROOT" ]] || [[ "${V_RUN_MODE}" == "noroot" ]]; then
-  echo "Detected NO ROOT installation"
-  f_noroot_create_schedule
- else
-  echo "PREF_INSTALL_TYPE not set correctly in ${V_CONFIG_FILE}. Run spotify-easyrpm to create a new installation"
-  exit 1
- fi
-fi
-}
-
-
-f_create_schedule() {
-if ! crontab -l | grep "${V_SCRIPT_NAME} -scheduled"; then
- echo "Creating cron job in your crontab"
- crontab -l > "${V_TMP_CRON_FILE}"
- cat << EOF >> "${V_TMP_CRON_FILE}"
-@daily /usr/bin/${V_SCRIPT_NAME} -scheduled
-EOF
- if crontab "${V_TMP_CRON_FILE}"; then
-  rm "${V_TMP_CRON_FILE}"
-  sed -i "s/\(PREF_PROMPT_SCHEDULE=\)\(.*\)/\1YES/" "${V_CONFIG_FILE}"
- else
-  rm "${V_TMP_CRON_FILE}"
-  f_error "Failed to create cron job in your crontab"
- fi
-fi
-# Remove legacy V_TMP_CRON_FILE if present
-if [[ -f /etc/cron.d/"${V_SCRIPT_NAME}" ]]; then
-  echo "Removing legacy schedule at /etc/cron.d/${V_SCRIPT_NAME}"
-  sudo rm /etc/cron.d/"${V_SCRIPT_NAME}"
-fi
-f_script_location_check
 }
 
 
 f_remove_schedule() {
- if crontab -l | grep "${V_SCRIPT_NAME} -scheduled"; then
-  echo "Removing ${V_SCRIPT_NAME} from your crontab"
-  crontab -l | grep -v "${V_SCRIPT_NAME} -scheduled" > "${V_TMP_CRON_FILE}"
-  crontab "${V_TMP_CRON_FILE}"
-  rm "${V_TMP_CRON_FILE}"
+ if [[ -f "${SYSTEMD_UNIT}" ]]; then
+  echo "Removing ${V_PRG_NAME} from your systemd unit files"
+  systemctl --user disable spotify-easyrpm
+  rm "${SYSTEMD_UNIT}"
  fi
- if [[ -f /etc/zypp/repos.d/${V_SCRIPT_NAME}.repo ]]; then
-  echo "Removing ${V_SCRIPT_NAME} zypper repo"
-  sudo zypper rr "${V_SCRIPT_NAME}"
- fi
- if [[ -d "${V_LOCAL_REPO}" ]]; then
-  echo "Removing ${V_SCRIPT_NAME} repo from filesystem"
-  sudo rm -r "${V_LOCAL_REPO}"
- fi
- # Remove legacy V_TMP_CRON_FILE if present
-if [[ -f /etc/cron.d/"${V_SCRIPT_NAME}" ]]; then
-  echo "Removing legacy schedule at /etc/cron.d/${V_SCRIPT_NAME}"
-  sudo rm /etc/cron.d/"${V_SCRIPT_NAME}"
-fi
 }
 
+f_remove_repo() {
+ if [[ -f /etc/zypp/repos.d/${V_PRG_NAME}.repo ]]; then
+  echo "Removing ${V_PRG_NAME} zypper repo"
+  sudo zypper rr "${V_PRG_NAME}"
+ fi
+ if [[ -d "${V_LOCAL_REPO}" ]]; then
+  echo "Removing ${V_PRG_NAME} repo from filesystem"
+  sudo rm -r "${V_LOCAL_REPO}"
+ fi
+}
 
-
-## REGULAR ROOT BUILD / INSTALL MODE FUNCTIONS ##
-
-
-
-
-f_rpm_install_build_deps() {
+f_install_build_deps() {
 if ! rpm -q rpm-build > /dev/null 2>&1; then
  echo "Installing build dependencies (rpm-build)"
  if ! sudo zypper --non-interactive in rpm-build; then
@@ -413,16 +257,15 @@ if ! rpm -q update-desktop-files > /dev/null 2>&1; then
 fi
 }
 
-f_rpm_prepare_src() {
+f_prepare_src() {
 echo "Preparing RPM src tarball"
 mkdir -p "${V_SOURCES_DIR}"/"${V_PKGNAME}"/usr/share/applications
-f_rpm_desktop_entry
-f_set_deb_ver
+f_desktop_entry
 tar czf "${V_SOURCES_DIR}"/"${V_PKGNAME}"-"${V_DEB_VER}".tar.gz -C "${V_SOURCES_DIR}"/ "${V_PKGNAME}"
 }
 
 
-f_rpm_desktop_entry() {
+f_desktop_entry() {
 cat << EOF > "${V_SOURCES_DIR}"/"${V_PKGNAME}"/usr/share/applications/spotify.desktop
 [Desktop Entry]
 Name=Spotify
@@ -439,9 +282,8 @@ EOF
 }
 
 
-f_rpm_ver_compare() {
+f_ver_compare() {
 echo "Comparing debian repo version to installed or local machine repo version (if any)"
-f_set_deb_ver
 if [[ "$(rpm -q "${V_PKGNAME}" | cut -f3 -d"-")" == "${V_DEB_VER}" ]] || [[ "$(find ${V_LOCAL_REPO} -type f -name "*.rpm" | sort | tail -n1 | cut -f4 -d"-")" == "${V_DEB_VER}" ]] ; then
  if [[ "${V_RUN_MODE}" != "prompt" ]]; then
   echo "spotify-client ${V_DEB_VER} is already installed or available from local machine repo. Quitting"
@@ -566,7 +408,7 @@ EOF
 }
 
 
-f_rpm_run_build() {
+f_run_build() {
 echo "Running rpm build"
 if ! rpmbuild -bb --quiet --clean "${V_SPECS_DIR}"/spotify.spec; then
 f_error "Spotify RPM failed to build. Aborting"
@@ -576,7 +418,7 @@ fi
 }
 
 
-f_rpm_install_prompt() {
+f_install_prompt() {
 if [[ "${V_RUN_MODE}" != "prompt" ]]; then
   f_rpm_install
 else
@@ -602,11 +444,10 @@ echo "Installing ${V_PKGNAME}-${V_DEB_VER}"
 if ! sudo zypper --non-interactive --no-gpg-check in "${V_RPMS_DIR}"/"${V_RPM_ARCH}"/"${V_PKGNAME}"-"${V_DEB_VER}"*"${V_RPM_ARCH}".rpm; then
   f_error "Failed to install ${V_PKGNAME}-${V_DEB_VER}"
 fi
-sed -i "s/\(PREF_INSTALL_TYPE=\)\(.*\)/\1RPM/" "${V_CONFIG_FILE}"
 }
 
 
-f_rpm_create_schedule() {
+f_create_repo() {
 if ! rpm -q createrepo > /dev/null 2>&1; then
  echo "Installing CreateRepo for local filesystem repo"
  if ! sudo zypper --non-interactive in createrepo; then
@@ -625,18 +466,37 @@ fi
 if ! sudo find ${V_LOCAL_REPO} -type f -exec chmod 666 {} \+; then
  f_error "Failed to chmod ${V_LOCAL_REPO}"
 fi
-f_rpm_update_local_repo
-if [[ ! -f /etc/zypp/repos.d/${V_SCRIPT_NAME}.repo ]]; then
+f_update_local_repo
+if [[ ! -f /etc/zypp/repos.d/${V_PRG_NAME}.repo ]]; then
  echo "Adding local file system repository to zypper"
- if ! sudo zypper ar -G --refresh "${V_LOCAL_REPO}" "${V_SCRIPT_NAME}"; then
+ if ! sudo zypper ar -G --refresh "${V_LOCAL_REPO}" "${V_PRG_NAME}"; then
   f_error "Failed to add local repo to zypper. Aborting"
  fi
 fi
-f_create_schedule
+}
+
+f_create_systemd_unit() {
+if [[ ! -f "${SYSTEMD_UNIT}" ]]; then
+ echo "Creating automated Spotify builds"
+ mkdir -p "${SYSTEMD_UNIT_DIR}"
+ cat << EOF >> "${SYSTEMD_UNIT}"
+[Unit]                                                                                                                                                                                                        
+Description="${V_PRG_NAME}" scheduler                                                                                                                                                                         
+                                                                                                                                                                                                              
+[Service]                                                                                                                                                                                                     
+ExecStart=/usr/bin/"${V_PRG_NAME}" --scheduled                                                                                                                                                                
+                                                                                                                                                                                                              
+[Install]                                                                                                                                                                                                     
+WantedBy=default.target                                                                                                                                                                                       
+                        
+EOF
+  sed -i "s/\(PREF_PROMPT_SCHEDULE=\)\(.*\)/\1YES/" "${V_CONFIG_FILE}"
+fi
+systemctl --user enable "${V_PRG_NAME}"
 }
 
 
-f_rpm_update_local_repo() {
+f_update_local_repo() {
 if [[ "${V_RUN_MODE}" != "clean-repo" ]]; then
 echo "Moving RPMs from your rpmbuild ${V_RPMS_DIR} to your local repo ${V_LOCAL_REPO}"
 find "${V_RPMS_DIR}"/"${V_RPM_ARCH}"/ -name "${V_PKGNAME}"-*"${V_RPM_ARCH}".rpm -type f -exec mv -t "${V_LOCAL_REPO}" {} \+
@@ -648,229 +508,94 @@ fi
 
 f_clean_repo() {
 sudo find "${V_LOCAL_REPO}" -type f -name "*.rpm" -exec rm {} \;
-f_rpm_update_local_repo
+f_update_local_repo
 echo "done!"
 }
 
 
-## NO ROOT MODE FUNCTIONS ##
-
-
-
-
-f_noroot_desktop_entry() {
-cat << EOF > "${V_NOROOT_INSTALL_DIR}"/spotify.desktop
-[Desktop Entry]
-Name=Spotify
-GenericName=Music Player
-Comment=Spotify streaming music client
-Icon=${V_NOROOT_INSTALL_DIR}/icons/spotify-linux-64.png
-Exec=${V_NOROOT_INSTALL_DIR}/spotify %U
-TryExec=${V_NOROOT_INSTALL_DIR}/spotify
-Terminal=false
-Type=Application
-Categories=Audio;Music;Player;AudioVideo;
-MimeType=x-scheme-handler/spotify;
-EOF
-if [[ -f /usr/bin/xdg-desktop-menu ]]; then
-  echo "Refreshing desktop menu database"
-  /usr/bin/xdg-desktop-menu install --novendor "${V_NOROOT_INSTALL_DIR}"/spotify.desktop
-else
-  echo "Unable to register menu item. Please install xdg-utils for this to work"
-fi
-}
-
-
-f_noroot_ver_compare() {
-  echo "Comparing the repo version to installed version (if any)"
-  f_set_deb_ver
-  if [[ "${V_NOROOT_INSTALLED_VER}" == "${V_DEB_VER}" ]]; then
-   if [[ "${V_RUN_MODE}" != "noroot" ]]; then
-    f_cleanup
-    exit 0
-  else
-   while true
-    do
-      read -rp "The latest version in the repo is ${V_DEB_VER} which is already installed. Continue? (y/n)" Q_NOROOT_SAME_VER
-       case $Q_NOROOT_SAME_VER in
-
-        y ) echo "ok"
-            break;;
-
-        n ) f_schedule_prompt
-            f_cleanup
-            echo "bye"
-      exit;;
-
-    esac
-  done
- fi
-fi
-}
-
-
-f_noroot_create_schedule() {
-f_create_schedule
-}
-
-f_noroot_check_libcurl() {
-  if [[ "${V_SYS_ARCH}" == i386 ]]; then
-   if [[ ! -f /usr/lib/libcurl-gnutls.so.4 ]]; then
-     cat << EOF
-  Spotify now requires libcurl-gnutls.so.4 which is not present on SUSE.
-
-  Please run sudo ln -s /usr/lib/libcurl.so.4 /usr/lib/libcurl-gnutls.so.4
-
-EOF
-   fi
- elif [[ "${V_SYS_ARCH}" == x86_64 ]]; then
-   if [[ ! -f /usr/lib64/libcurl-gnutls.so.4 ]]; then
-     cat << EOF
-  Spotify now requires libcurl-gnutls.so.4 which is not present on SUSE.
-
-  Please run sudo ln -s /usr/lib64/libcurl.so.4 /usr/lib64/libcurl-gnutls.so.4
-
-EOF
-   fi
- fi
-}
-
-f_noroot_install() {
-  echo "Installing Spotify to your homedir"
-  if [ ! -d "${V_NOROOT_INSTALL_DIR}" ]; then
-    mkdir -p "${V_NOROOT_INSTALL_DIR}"
-  else
-    rm -r "${V_NOROOT_INSTALL_DIR}"
-    mkdir -p "${V_NOROOT_INSTALL_DIR}"
-  fi
-  if ! mv "${V_SOURCES_DIR}"/"${V_PKGNAME}"/usr/share/spotify/* "${V_NOROOT_INSTALL_DIR}"/; then
-    f_error "Failed to install Spotify"
-  fi
-  sed -i "s/\(V_NOROOT_INSTALLED_VER=\)\(.*\)/\1${V_DEB_VER}/" "${V_CONFIG_FILE}"
-  sed -i "s/\(PREF_INSTALL_TYPE=\)\(.*\)/\1NOROOT/" "${V_CONFIG_FILE}"
-  f_noroot_desktop_entry
-  if [[ -d "${HOME}"/bin ]]; then
-    if [[ ! -L "${HOME}"/bin/spotify ]]; then
-      echo "Creating shortcut in ${HOME}/bin/spotify"
-      ln -s "${V_NOROOT_INSTALL_DIR}"/spotify "${HOME}"/bin/spotify
-    fi
-  fi
-  cat << EOF
-  Done.... To uninstall run ${V_SCRIPT_NAME} -noroot-uninstall
-
-  Ensure you have all the dependencies needed to run Spotify. Since you have chosen "NO ROOT" I won't do this for you
-  but an example is...
-
-  "sudo zypper in libasound2 libcurl4 gconf2 libgtk-2_0-0 libglib-2_0-0 libgcrypt20 mozilla-nss libudev1 libX11-6 libXtst6 libopenssl1_0_0 libavcodec56 libavformat56 zenity libnotify4"
-EOF
-}
-
-
-f_noroot_uninstall() {
-  echo "Uninstalling Spotify from your homedir"
-  if [[ -f /usr/bin/xdg-desktop-menu ]]; then
-    if [[ -f "${V_NOROOT_INSTALL_DIR}"/spotify.desktop ]]; then
-      /usr/bin/xdg-desktop-menu uninstall "${V_NOROOT_INSTALL_DIR}"/spotify.desktop
-    fi
-  fi
-  if [ -d "${V_NOROOT_INSTALL_DIR}" ]; then
-    rm -r "${V_NOROOT_INSTALL_DIR}"
-  fi
-  if [[ -L "${HOME}"/bin/spotify ]]; then
-    rm "${HOME}"/bin/spotify
-  fi
-  sed -i "s/\(V_NOROOT_INSTALLED_VER=\)\(.*\)/\1/" "${V_CONFIG_FILE}"
-  sed -i "s/\(PREF_INSTALL_TYPE=\)\(.*\)/\1/" "${V_CONFIG_FILE}"
-  echo "Done!"
-  if crontab -l | grep "${V_SCRIPT_NAME} -scheduled"; then
-    while true
-    do
-      read -rp "Do you want to remove the schedule too (y/n)?" Q_REMOVE_SCHEDULE_ANSWER
-
-      case $Q_REMOVE_SCHEDULE_ANSWER in
-       y ) f_remove_schedule
-       break;;
-
-       n ) echo "ok"
-       exit;;
-    esac
-   done
-fi
-}
-
-
-## MAIN PROCESS FUNCTION ##
-
-
-
-
 f_main() {
-clear
-if [[ "${V_RUN_MODE}" == *prompt ]]; then
+while [ "$1" != "" ]; do
+  case "$1" in
+    -h | --help )       V_RUN_MODE="help"
+                        f_logo
+                        f_help
+                        exit 0
+                        ;;
+    --quiet )           V_RUN_MODE="quiet"
+                        f_logo
+                        f_install_build_deps
+                        f_create_rpmbuild_dirs
+                        f_set_deb_ver
+                        f_ver_compare
+                        f_download
+                        f_extract_deb
+                        f_prepare_src
+                        f_rpm_spec
+                        f_run_build
+                        f_install_prompt
+                        f_create_repo
+                        f_create_systemd_unit
+                        f_script_location_check
+                        break
+                        ;;
+    --scheduled | -scheduled )  V_RUN_MODE="scheduled"
+                        f_set_deb_ver
+                        f_ver_compare
+                        f_download
+                        f_extract_deb
+                        f_prepare_src
+                        f_rpm_spec
+                        f_run_build
+                        f_update_local_repo
+                        break
+                        ;;
+    --create-schedule ) V_RUN_MODE="create-schedule"
+                        f_logo
+                        f_schedule_prompt
+                        break
+                        ;;
+    --remove-schedule ) V_RUN_MODE="remove-schedule"
+                        f_logo
+                        f_remove_schedule
+                        f_remove_repo
+                        break
+                        ;;
+    --clean-repo )      V_RUN_MODE="clean-repo"
+                        f_logo
+                        f_clean_repo
+                        break
+                        ;;
+    * )                 V_RUN_MODE="invalid"
+                        f_logo
+                        echo "Unrecognised option. Run --help for more info"
+                        exit 1
+    esac
+    shift
+done
+if [[ -z "${V_RUN_MODE}" ]]; then
+V_RUN_MODE="prompt"
  f_logo
- f_install_check
- f_rpm_install_build_deps
- f_create_local_build_dirs
- f_rpm_ver_compare
+ f_install_build_deps
+ f_create_rpmbuild_dirs
+ f_set_deb_ver
+ f_ver_compare
  f_download
  f_extract_deb
- f_rpm_prepare_src
+ f_prepare_src
  f_rpm_spec
- f_rpm_run_build
- f_rpm_install_prompt
+ f_run_build
+ f_install_prompt
  f_schedule_prompt
-elif [[ "${V_RUN_MODE}" == "noroot" ]]; then
- f_logo
- f_install_check
- f_create_local_build_dirs
- f_noroot_ver_compare
- f_download
- f_extract_deb
- f_noroot_install
- f_noroot_check_libcurl
- f_schedule_prompt
-elif [[ "${V_RUN_MODE}" == "scheduled" ]]; then
- if [[ "${PREF_INSTALL_TYPE}" == "NOROOT" ]]; then
-  f_noroot_ver_compare
- else
-  f_rpm_ver_compare
- fi
- f_download
- f_extract_deb
- if [[ "${PREF_INSTALL_TYPE}" == "NOROOT" ]]; then
-  f_noroot_install
-else
-  f_rpm_prepare_src
-  f_rpm_spec
-  f_rpm_run_build
-  f_rpm_update_local_repo
-fi
-elif [[ "${V_RUN_MODE}" == "create-schedule" ]]; then
- f_logo
- f_schedule_prompt
-elif [[ "${V_RUN_MODE}" == "remove-schedule" ]]; then
- f_logo
- f_remove_schedule
-elif [[ "${V_RUN_MODE}" == "noroot-uninstall" ]]; then
- f_logo
- f_noroot_uninstall
-elif [[ "${V_RUN_MODE}" == "clean-repo" ]]; then
-  f_logo
-  f_clean_repo
 fi
 }
-
 
 
 ### EXECUTION BEGINS ###
 
 
-
-f_help
 f_root_check
 f_arch_check
-f_mode_check
 f_config
 f_cleanup
-f_main
+f_main "$@"
 f_cleanup

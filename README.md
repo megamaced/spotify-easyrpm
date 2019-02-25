@@ -3,8 +3,8 @@
 ![img](https://i.imgur.com/y0tDlYD.png)
 
 Spotify-easyrpm is a script which can download the latest debian package from the Spotify
-repository and convert it into an RPM. It is also capable of installing, scheduling and storing
-the RPMs in a local filesystem repo for installing Spotify updates alongside regular system updates
+repository and convert it into an RPM. It is also capable of installing, automated updating and storing
+the Spotify RPMs in a local filesystem repo for installing Spotify updates alongside regular system updates
 
 
  Features
@@ -13,9 +13,9 @@ the RPMs in a local filesystem repo for installing Spotify updates alongside reg
  * Auto download the latest version of Spotify
  * Convert the debian package to RPM format
  * Install the Spotify RPM
- * Automated updated schedule via cron job (optional)
- * Create a local filesystem repo so Spotify can be updated alongside regular updates (optional)
- * Fully unattended mode (optional)
+ * Automated Spotify update check
+ * Create a local filesystem repo so Spotify can be updated alongside regular updates
+ * Fully unattended quiet mode
 
 
  Howto
@@ -28,7 +28,7 @@ the RPMs in a local filesystem repo for installing Spotify updates alongside reg
 
   - Create the RPM
   - Install the Spotify RPM
-  - Set up a scheduled update job
+  - Set up a update timer job
   - Set up a local filesystem repo
 
   spotify-easyrpm --create-schedule
@@ -55,3 +55,20 @@ the RPMs in a local filesystem repo for installing Spotify updates alongside reg
  * openSUSE 15.0
  https://software.opensuse.org/ymp/home:megamaced:spotify-easyrpm/openSUSE_Leap_15.0/spotify-easyrpm.ymp?base=openSUSE%3ALeap%3A15.0&query=spotify-easyrpm
  * openSUSE Tumbleweed https://software.opensuse.org/ymp/home:megamaced:spotify-easyrpm/openSUSE_Tumbleweed/spotify-easyrpm.ymp?base=openSUSE%3AFactory&query=spotify-easyrpm
+
+
+Auto Updates
+
+spotify-easyrpm can create a systemd user timer job which will run 5 minutes after user login. 
+This will call the script to do a light check against the Spotify debian repo for a new release.
+If a new release is found, a build process is kicked off in the background and the final RPM will
+be placed on your machine in a local filesystem repo (/var/cache/spotify-easyrpm).
+The next time you run the system updater or zypper up you will see spotify-client appear as an
+update alongside regular updates.
+
+If you want to modify the update check timer, the file is at $HOME/.local/share/systemd/user/spotify-easyrpm.timer
+Please see the systemd documentation for more information
+
+If you want to see the output of the last update check or build process, you can run
+
+journalctl --user-unit spotify-easyrpm

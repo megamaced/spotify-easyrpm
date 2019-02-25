@@ -25,6 +25,7 @@ V_BUILDROOT_DIR="${HOME}/rpmbuild/BUILDROOT"
 
 SYSTEMD_UNIT_DIR="${HOME}/.local/share/systemd/user"
 SYSTEMD_UNIT="${SYSTEMD_UNIT_DIR}/${V_PRG_NAME}.service"
+SYSTEMD_TIMER="${SYSTEMD_UNIT_DIR}/${V_PRG_NAME}.timer"
 V_LOCAL_REPO="/var/cache/${V_PRG_NAME}"
 
 
@@ -39,7 +40,7 @@ cat <<EOF
 EOF
 sleep 2
 cat <<EOF
-VERSION: 2.0.0
+VERSION: 2.0.1
 SUPPORT: https://github.com/megamaced/spotify-easyrpm/issues
 The latest openSUSE Leap, Tumbleweed or SLE are supported only
 
@@ -195,7 +196,7 @@ fi
 
 f_schedule_prompt() {
 echo "Checking for an existing schedule"
- if [[ ! -f "${SYSTEMD_UNIT}" ]]; then
+ if [[ ! -f "${SYSTEMD_TIMER}" ]]; then
   if [[ "${V_RUN_MODE}" == "create-schedule" ]] || [[ "${PREF_PROMPT_SCHEDULE}" != "NO" ]]; then
   while true
   do
@@ -228,6 +229,13 @@ f_remove_schedule() {
   echo "Removing ${V_PRG_NAME} from your systemd unit files"
   systemctl --user disable spotify-easyrpm
   rm "${SYSTEMD_UNIT}"
+  systemctl --user daemon-reload
+ fi
+ if [[ -f "${SYSTEMD_TIMER}" ]]; then
+  echo "Removing ${V_PRG_NAME} from your systemd timers"
+  systemctl --user disable spotify-easyrpm.timer
+  rm "${SYSTEMD_TIMER}"
+  systemctl --user daemon-reload
  fi
 }
 
@@ -476,23 +484,32 @@ fi
 }
 
 f_create_systemd_unit() {
-if [[ ! -f "${SYSTEMD_UNIT}" ]]; then
+if [[ ! -f "${SYSTEMD_TIMER}" ]]; then
  echo "Creating automated Spotify builds"
  mkdir -p "${SYSTEMD_UNIT_DIR}"
- cat << EOF >> "${SYSTEMD_UNIT}"
-[Unit]                                                                                                                                                                                                        
-Description="${V_PRG_NAME}" scheduler                                                                                                                                                                         
+ cat << EOF > "${SYSTEMD_UNIT}"
+[Unit]                                                                                                                             
+Description=${V_PRG_NAME} script                                                                                                                                                                         
                                                                                                                                                                                                               
-[Service]                                                                                                                                                                                                     
-ExecStart=/usr/bin/"${V_PRG_NAME}" --scheduled                                                                                                                                                                
-                                                                                                                                                                                                              
-[Install]                                                                                                                                                                                                     
-WantedBy=default.target                                                                                                                                                                                       
-                        
+[Service]                                                                                                                                                                
+ExecStart=/usr/bin/${V_PRG_NAME} --scheduled
+
+EOF
+ cat << EOF > "${SYSTEMD_TIMER}"
+[Unit]
+Description=${V_PRG_NAME} timer
+
+[Timer]
+OnBootSec=5min
+
+[Install]
+WantedBy=timers.target
 EOF
   sed -i "s/\(PREF_PROMPT_SCHEDULE=\)\(.*\)/\1YES/" "${V_CONFIG_FILE}"
 fi
-systemctl --user enable "${V_PRG_NAME}"
+systemctl --user daemon-reload
+systemctl --user disable "${V_PRG_NAME}"
+systemctl --user enable "${V_PRG_NAME}.timer"
 }
 
 

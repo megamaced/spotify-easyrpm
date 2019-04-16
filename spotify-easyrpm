@@ -501,6 +501,8 @@ Description=${V_PRG_NAME} timer
 
 [Timer]
 OnBootSec=5min
+OnCalendar=daily
+Persistent=true
 
 [Install]
 WantedBy=timers.target

@@ -59,7 +59,7 @@ the Spotify RPMs in a local filesystem repo for installing Spotify updates along
 
 Auto Updates
 
-spotify-easyrpm can create a systemd user timer job which will run 5 minutes after user login. 
+spotify-easyrpm can create a systemd user timer job which will run daily and 5 minutes after user login. 
 This will call the script to do a light check against the Spotify debian repo for a new release.
 If a new release is found, a build process is kicked off in the background and the final RPM will
 be placed on your machine in a local filesystem repo (/var/cache/spotify-easyrpm).

@@ -159,7 +159,7 @@ V_RPMBUILD_OWNER_CHECK="$(find "${HOME}"/rpmbuild -not -user "$(id -u)")"
 if [[ ! -z "${V_RPMBUILD_OWNER_CHECK}" ]]; then
   echo "Detected some directories / files not owned by you. Fixing ${V_RPMBUILD_OWNER_CHECK}"
   for i in ${V_RPMBUILD_OWNER_CHECK}; do
-    sudo chown "${USER}" "$i"
+    sudo chown "$(id -u)" "$i"
   done
 fi
 if [[ ! -f "${HOME}"/.rpmmacros ]]; then

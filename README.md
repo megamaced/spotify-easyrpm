@@ -20,6 +20,7 @@ the Spotify RPMs in a local filesystem repo for installing Spotify updates along
 
  News
 
+  * 13/09/19 - We got accepted into openSUSE:Factory! We are now in the official Tumbleweed oss repo
   * 08/05/19 - We got accepted into multimedia:apps repo on the Open Build Service! I'm using their
     one click install links below where possible
 
@@ -67,7 +68,11 @@ the Spotify RPMs in a local filesystem repo for installing Spotify updates along
     If you want to modify the update check timer, the file is at $HOME/.local/share/systemd/user/spotify-easyrpm.timer
     Please see the systemd documentation for more information
 
-    If you want to see the output of the last update check or build process, you can run
+    To see a brief summary of the last run do
+
+    systemctl --user status spotify-easyrpm
+
+    If you want to see the full output of the last run you can do
 
     journalctl --user-unit spotify-easyrpm
 
@@ -83,4 +88,4 @@ the Spotify RPMs in a local filesystem repo for installing Spotify updates along
  * openSUSE 15.1 
  https://software.opensuse.org/ymp/multimedia:apps/openSUSE_Leap_15.1/spotify-easyrpm.ymp?base=openSUSE%3ALeap%3A15.1&query=spotify-easyrpm
  * openSUSE Tumbleweed 
- https://software.opensuse.org/ymp/multimedia:apps/openSUSE_Tumbleweed/spotify-easyrpm.ymp?base=openSUSE%3AFactory&query=spotify-easyrpm
+ We are included in Tumbleweed. Just a `zypper in spotify-easyrpm` away

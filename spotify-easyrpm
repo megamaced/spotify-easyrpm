@@ -453,9 +453,9 @@ fi
 
 
 f_create_repo() {
-if ! rpm -q createrepo > /dev/null 2>&1; then
+if ! rpm -q createrepo_c > /dev/null 2>&1; then
  echo "Installing CreateRepo for local filesystem repo"
- if ! sudo zypper --non-interactive in createrepo; then
+ if ! sudo zypper --non-interactive in createrepo_c; then
  f_error "Failed to install createrepo. Aborting"
  fi
 fi

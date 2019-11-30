@@ -40,7 +40,7 @@ cat <<EOF
 EOF
 sleep 2
 cat <<EOF
-VERSION: 2.0.3
+VERSION: 2.1.0
 SUPPORT: https://github.com/megamaced/spotify-easyrpm/issues
 The latest openSUSE Leap, Tumbleweed or SLE are supported only
 

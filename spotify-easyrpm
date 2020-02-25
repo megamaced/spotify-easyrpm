@@ -40,7 +40,7 @@ cat <<EOF
 EOF
 sleep 2
 cat <<EOF
-VERSION: 2.1.0
+VERSION: 2.1.1
 SUPPORT: https://github.com/megamaced/spotify-easyrpm/issues
 The latest openSUSE Leap, Tumbleweed or SLE are supported only
 
@@ -515,7 +515,7 @@ systemctl --user enable "${V_PRG_NAME}.timer"
 f_update_local_repo() {
 if [[ "${V_RUN_MODE}" != "clean-repo" ]]; then
 echo "Moving RPMs from your rpmbuild ${V_RPMS_DIR} to your local repo ${V_LOCAL_REPO}"
-find "${V_RPMS_DIR}"/"${V_RPM_ARCH}"/ -name "${V_PKGNAME}"-*"${V_RPM_ARCH}".rpm -type f -exec mv -t "${V_LOCAL_REPO}" {} \+
+find "${V_RPMS_DIR}"/"${V_RPM_ARCH}"/ -name "${V_PKGNAME}-*${V_RPM_ARCH}.rpm" -type f -exec mv -t "${V_LOCAL_REPO}" {} \+
 fi
 if ! createrepo -q "${V_LOCAL_REPO}"; then
  f_error "Failed to create / update local repo. Aborting"

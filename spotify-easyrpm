@@ -446,7 +446,7 @@ fi
 
 f_rpm_install() {
 echo "Installing ${V_PKGNAME}-${V_DEB_VER}"
-if ! sudo zypper --non-interactive --no-gpg-check in "${V_RPMS_DIR}"/"${V_RPM_ARCH}"/"${V_PKGNAME}"-"${V_DEB_VER}"*"${V_RPM_ARCH}".rpm; then
+if ! sudo zypper --non-interactive --no-gpg-checks in "${V_RPMS_DIR}"/"${V_RPM_ARCH}"/"${V_PKGNAME}"-"${V_DEB_VER}"*"${V_RPM_ARCH}".rpm; then
   f_error "Failed to install ${V_PKGNAME}-${V_DEB_VER}"
 fi
 }

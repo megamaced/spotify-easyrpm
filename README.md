@@ -27,26 +27,35 @@ the Spotify RPMs in a local filesystem repo for installing Spotify updates along
  
  ### Howto
 
-  `spotify-easyrpm`
-
+```bash
+$> spotify-easyrpm
+```
   - Regular prompt based mode to create an RPM and optionally install and create an update schedule
 
-  `spotify-easyrpm --quiet`
+```bash
+$> spotify-easyrpm --quiet
+```
 
   - Create the RPM
   - Install the Spotify RPM
   - Set up a update timer job
   - Set up a local filesystem repo
 
-  `spotify-easyrpm --create-schedule`
+```bash
+$> spotify-easyrpm --create-schedule
+```
 
   - If you previously opted out creating an automated update schedule but now desire it
 
-  `spotify-easyrpm --remove-schedule`
+```bash
+$> spotify-easyrpm --remove-schedule
+```
 
   - Removes the schedule and local repo if present
 
-  `spotify-easyrpm --clean-repo`
+```bash
+$> spotify-easyrpm --clean-repo
+```
 
   - Cleans up the local filesystem repo
 

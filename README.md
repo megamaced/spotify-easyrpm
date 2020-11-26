@@ -7,7 +7,7 @@ repository and convert it into an RPM. It is also capable of installing, automat
 the Spotify RPMs in a local filesystem repo for installing Spotify updates alongside regular system updates
 
 
- Features
+ ### Features
 
  * Set up a build enviornment on your PC and install rpm-build
  * Auto download the latest version of Spotify
@@ -18,45 +18,54 @@ the Spotify RPMs in a local filesystem repo for installing Spotify updates along
  * Fully unattended quiet mode
 
 
- News
+ ### News
 
   * 13/09/19 - We got accepted into openSUSE:Factory! We are now in the official Tumbleweed oss repo
   * 08/05/19 - We got accepted into multimedia:apps repo on the Open Build Service! I'm using their
     one click install links below where possible
 
  
- Howto
+ ### Howto
 
-  spotify-easyrpm
-
+```bash
+$> spotify-easyrpm
+```
   - Regular prompt based mode to create an RPM and optionally install and create an update schedule
 
-  spotify-easyrpm --quiet
+```bash
+$> spotify-easyrpm --quiet
+```
 
   - Create the RPM
   - Install the Spotify RPM
   - Set up a update timer job
   - Set up a local filesystem repo
 
-  spotify-easyrpm --create-schedule
+```bash
+$> spotify-easyrpm --create-schedule
+```
 
   - If you previously opted out creating an automated update schedule but now desire it
 
-  spotify-easyrpm --remove-schedule
+```bash
+$> spotify-easyrpm --remove-schedule
+```
 
   - Removes the schedule and local repo if present
 
-  spotify-easyrpm --clean-repo
+```bash
+$> spotify-easyrpm --clean-repo
+```
 
   - Cleans up the local filesystem repo
 
 
- Requirements
+ ### Requirements
 
  * openSUSE Leap / SLE (x86_64), or Tumbleweed (x86_64 or i586)
 
 
- Auto Updates
+ ### Auto Updates
 
     spotify-easyrpm can create a systemd user timer job which will run daily and 5 minutes after user login. 
     This will call the script to do a light check against the Spotify debian repo for a new release.
@@ -77,15 +86,10 @@ the Spotify RPMs in a local filesystem repo for installing Spotify updates along
     journalctl --user-unit spotify-easyrpm
 
 
- Download links (One Click Install)
+ ### Download links (One Click Install)
 
- * SLE 15 
- https://software.opensuse.org/ymp/home:megamaced:spotify-easyrpm/SLE_15/spotify-easyrpm.ymp?base=SUSE%3ASLE-15%3AGA&query=spotify-easyrpm
- * openSUSE 42.3 
- https://software.opensuse.org/ymp/multimedia:apps/openSUSE_Leap_42.3/spotify-easyrpm.ymp?base=openSUSE%3ALeap%3A42.3&query=spotify-easyrpm
- * openSUSE 15.0 
- https://software.opensuse.org/ymp/multimedia:apps/openSUSE_Leap_15.0/spotify-easyrpm.ymp?base=openSUSE%3ALeap%3A15.0&query=spotify-easyrpm
- * openSUSE 15.1 
- https://software.opensuse.org/ymp/multimedia:apps/openSUSE_Leap_15.1/spotify-easyrpm.ymp?base=openSUSE%3ALeap%3A15.1&query=spotify-easyrpm
- * openSUSE Tumbleweed 
- We are included in Tumbleweed. Just a `zypper in spotify-easyrpm` away
+ * [SLE 15](https://software.opensuse.org/ymp/home:megamaced:spotify-easyrpm/SLE_15/spotify-easyrpm.ymp?base=SUSE%3ASLE-15%3AGA&query=spotify-easyrpm)
+ * [openSUSE 42.3](https://software.opensuse.org/ymp/multimedia:apps/openSUSE_Leap_42.3/spotify-easyrpm.ymp?base=openSUSE%3ALeap%3A42.3&query=spotify-easyrpm)
+ * [openSUSE 15.0](https://software.opensuse.org/ymp/multimedia:apps/openSUSE_Leap_15.0/spotify-easyrpm.ymp?base=openSUSE%3ALeap%3A15.0&query=spotify-easyrpm)
+ * [openSUSE 15.1](https://software.opensuse.org/ymp/multimedia:apps/openSUSE_Leap_15.1/spotify-easyrpm.ymp?base=openSUSE%3ALeap%3A15.1&query=spotify-easyrpm)
+ * openSUSE Tumbleweed: We are included in Tumbleweed. Just a `zypper install spotify-easyrpm` away

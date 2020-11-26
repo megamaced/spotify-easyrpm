@@ -41,7 +41,7 @@ cat <<EOF
 EOF
 sleep 2
 cat <<EOF
-VERSION: 2.1.1
+VERSION: 2.1.2
 SUPPORT: https://github.com/megamaced/spotify-easyrpm/issues
 The latest openSUSE Leap, Tumbleweed or SLE are supported only
 
@@ -89,6 +89,7 @@ EOF
 
 f_error() {
 echo "$1" 1>&2
+echo "Please submit bug report to https://github.com/megamaced/spotify-easyrpm/issues"
 f_cleanup
 exit 1
 }

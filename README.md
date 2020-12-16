@@ -20,6 +20,7 @@ the Spotify RPMs in a local filesystem repo for installing Spotify updates along
 
  ### News
 
+  * 16/12/20 - We got accepted into the upcoming openSUSE Leap 15.3 oss repo!
   * 13/09/19 - We got accepted into openSUSE:Factory! We are now in the official Tumbleweed oss repo
   * 08/05/19 - We got accepted into multimedia:apps repo on the Open Build Service! I'm using their
     one click install links below where possible

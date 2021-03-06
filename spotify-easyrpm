@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# spotify-easyrpm is a script which can download the latest debian package from the Spotify
+# spotify-easyrpm is a script which can download the latest Spotify snap package from snapcraft.io
 # repository and convert it into an RPM. It is also capable of installing, scheduling and storing
 # the RPMs in a local filesystem repo for installing Spotify updates alongside regular system updates
 #
@@ -16,13 +16,17 @@ V_CONFIG_FILE="${HOME}/.${V_PRG_NAME}"
 V_SYS_ARCH="$(uname -i)"
 
 V_PKGNAME="spotify-client"
-V_HTTP_REPO="http://repository.spotify.com/pool/non-free/s/${V_PKGNAME}/"
+V_HTTP_REPO="$(curl -s -H 'Snap-Device-Series: 16' http://api.snapcraft.io/v2/snaps/info/spotify | jq -r '."channel-map"[] | select(.channel.name=="stable") | .download.url')"
+V_HTTP_VERSION="$(curl -s -H 'Snap-Device-Series: 16' http://api.snapcraft.io/v2/snaps/info/spotify | jq -r '."channel-map"[] | select(.channel.name=="stable") | .version')"
+V_HTTP_SNAP="$(basename ${V_HTTP_REPO})"
 
 V_TOPDIR=$(rpm --eval '%{_topdir}')
 V_SOURCES_DIR="${V_TOPDIR}/SOURCES"
 V_SPECS_DIR="${V_TOPDIR}/SPECS"
 V_RPMS_DIR="${V_TOPDIR}/RPMS"
 V_BUILDROOT_DIR="${V_TOPDIR}/BUILDROOT"
+
+V_SNAP_EXTRACT_DIR="${V_SOURCES_DIR}/spotify-snap"
 
 SYSTEMD_UNIT_DIR="${HOME}/.local/share/systemd/user"
 SYSTEMD_UNIT="${SYSTEMD_UNIT_DIR}/${V_PRG_NAME}.service"
@@ -37,13 +41,12 @@ cat <<EOF
 ┌─┐┌─┐┌─┐┌┬┐┬┌─┐┬ ┬   ┌─┐┌─┐┌─┐┬ ┬┬─┐┌─┐┌┬┐
 └─┐├─┘│ │ │ │├┤ └┬┘───├┤ ├─┤└─┐└┬┘├┬┘├─┘│││
 └─┘┴  └─┘ ┴ ┴└   ┴    └─┘┴ ┴└─┘ ┴ ┴└─┴  ┴ ┴
-
+Snap Edition (beta)
 EOF
 sleep 2
 cat <<EOF
-VERSION: 2.1.2
+VERSION: 3.0.0
 SUPPORT: https://github.com/megamaced/spotify-easyrpm/issues
-The latest openSUSE Leap, Tumbleweed or SLE are supported only
 
 MODE: ${V_RUN_MODE}
 EOF
@@ -53,7 +56,7 @@ EOF
 f_help() {
 cat <<EOF
 
-${V_PRG_NAME} is a script which can download the latest debian package from the Spotify
+${V_PRG_NAME} is a script which can download the latest Spotify snap package from snapcraft.io
 repository and convert it into an RPM. It is also capable of installing, scheduling and storing
 the RPMs in a local filesystem repo for installing Spotify updates alongside regular system updates
 
@@ -96,9 +99,8 @@ exit 1
 
 
 f_cleanup() {
-rm "${V_SOURCES_DIR}"/index.html > /dev/null 2>&1
-rm "${V_SOURCES_DIR}"/data.tar.gz > /dev/null 2>&1
-rm -r "${V_SOURCES_DIR:?}"/usr > /dev/null 2>&1
+rm "${V_SOURCES_DIR:?}"/*.snap > /dev/null 2>&1
+rm -r "${V_SNAP_EXTRACT_DIR}" > /dev/null 2>&1
 rm -r "${V_SOURCES_DIR:?}"/"${V_PKGNAME}"* > /dev/null 2>&1
 rm -r "${V_BUILDROOT_DIR:?}"/"${V_PKGNAME}"* > /dev/null 2>&1
 }
@@ -112,11 +114,7 @@ f_root_check() {
 
 
 f_arch_check() {
- if [[ "${V_SYS_ARCH}" == i386 ]]; then
-  V_DEB_ARCH=i386
-  V_RPM_ARCH=i586
- elif [[ "${V_SYS_ARCH}" == x86_64 ]]; then
-  V_DEB_ARCH=amd64
+ if [[ "${V_SYS_ARCH}" == x86_64 ]]; then
   V_RPM_ARCH=x86_64
  else
   f_error "Unsupported architecture. Aborting"
@@ -139,16 +137,10 @@ EOF
 
 
 f_download() {
-echo "Downloading the latest Spotify deb"
-if ! wget -P "${V_SOURCES_DIR}"/ "${V_HTTP_REPO}"/"${V_REPO_LATEST_DEB}"; then
+echo "Downloading the latest Spotify snap"
+if ! wget -P "${V_SOURCES_DIR}"/ "${V_HTTP_REPO}"; then
 f_error "Failed to download Spotify. Aborting"
 fi
-}
-
-
-f_set_deb_ver() {
-V_REPO_LATEST_DEB="$(curl -s --list-only "${V_HTTP_REPO}" | grep -wo "${V_PKGNAME}".*"${V_DEB_ARCH}".deb | cut -f2 -d">" | sort | tail -n1)"
-V_DEB_VER="$(echo $V_REPO_LATEST_DEB | cut -f2 -d"_" | cut -f1 -d"-")"
 }
 
 
@@ -174,14 +166,13 @@ fi
 }
 
 
-f_extract_deb() {
-echo "Extracting deb and preparing"
-ar -x "${V_SOURCES_DIR}"/"${V_PKGNAME}"*"${V_DEB_ARCH}".deb || f_error "Failed to extract deb"
-rm control.tar.gz debian-binary
-mv data.tar.gz "${V_SOURCES_DIR}"/
-tar xzf "${V_SOURCES_DIR}"/data.tar.gz -C "${V_SOURCES_DIR}"/
-mkdir -p "${V_SOURCES_DIR}"/"${V_PKGNAME}"
-mv "${V_SOURCES_DIR}"/usr "${V_SOURCES_DIR}"/"${V_PKGNAME}"/
+f_extract_snap() {
+echo "Extracting snap and preparing"
+unsquashfs -q -d "${V_SNAP_EXTRACT_DIR}" "${V_SOURCES_DIR}"/"${V_HTTP_SNAP}" || f_error "Failed to extract snap"
+mkdir -p "${V_SOURCES_DIR}"/"${V_PKGNAME}"/usr/{share/applications,share/doc,bin}
+mv "${V_SNAP_EXTRACT_DIR}"/usr/share/spotify "${V_SOURCES_DIR}"/"${V_PKGNAME}"/usr/share
+mv "${V_SNAP_EXTRACT_DIR}"/usr/bin/spotify "${V_SOURCES_DIR}"/"${V_PKGNAME}"/usr/bin
+mv "${V_SNAP_EXTRACT_DIR}"/usr/share/doc/"${V_PKGNAME}" "${V_SOURCES_DIR}"/"${V_PKGNAME}"/usr/share/doc
 }
 
 
@@ -253,22 +244,27 @@ f_install_build_deps() {
 if ! rpm -q rpm-build > /dev/null 2>&1; then
  echo "Installing build dependencies (rpm-build)"
  if ! sudo zypper --non-interactive in rpm-build; then
- f_error "Failed to install build dependencies. Aborting"
+ f_error "Failed to install build dependencies (rpm-build). Aborting"
  fi
 fi
 if ! rpm -q update-desktop-files > /dev/null 2>&1; then
  echo "Installing build dependencies (update-desktop-files)"
  if ! sudo zypper --non-interactive in update-desktop-files; then
- f_error "Failed to install build dependencies. Aborting"
+ f_error "Failed to install build dependencies (update-desktop-files). Aborting"
+ fi
+fi
+if ! rpm -q squashfs > /dev/null 2>&1; then
+ echo "Installing build dependencies (squashfs)"
+ if ! sudo zypper --non-interactive in squashfs; then
+ f_error "Failed to install build dependencies (squashfs). Aborting"
  fi
 fi
 }
 
 f_prepare_src() {
 echo "Preparing RPM src tarball"
-mkdir -p "${V_SOURCES_DIR}"/"${V_PKGNAME}"/usr/share/applications
 f_desktop_entry
-tar czf "${V_SOURCES_DIR}"/"${V_PKGNAME}"-"${V_DEB_VER}".tar.gz -C "${V_SOURCES_DIR}"/ "${V_PKGNAME}"
+tar czf "${V_SOURCES_DIR}"/"${V_PKGNAME}"-"${V_HTTP_VERSION}".tar.gz -C "${V_SOURCES_DIR}"/ "${V_PKGNAME}"
 }
 
 
@@ -290,16 +286,16 @@ EOF
 
 
 f_ver_compare() {
-echo "Comparing debian repo version to installed or local machine repo version (if any)"
-if [[ "$(rpm -q "${V_PKGNAME}" | cut -f3 -d"-")" == "${V_DEB_VER}" ]] || [[ "$(find ${V_LOCAL_REPO} -type f -name "*.rpm" | sort | tail -n1 | cut -f4 -d"-")" == "${V_DEB_VER}" ]] ; then
+echo "Comparing snapcraft.io repo version to installed or local machine repo version (if any)"
+if [[ "$(rpm -q "${V_PKGNAME}" | cut -f3 -d"-")" == "${V_HTTP_VERSION}" ]] || [[ "$(find ${V_LOCAL_REPO} -type f -name "*.rpm" | sort | tail -n1 | cut -f4 -d"-")" == "${V_HTTP_VERSION}" ]] ; then
  if [[ "${V_RUN_MODE}" != "prompt" ]]; then
-  echo "spotify-client ${V_DEB_VER} is already installed or available from local machine repo. Quitting"
+  echo "spotify-client ${V_HTTP_VERSION} is already installed or available from local machine repo. Quitting"
   f_cleanup
   exit 0
  else
  while true
   do
-   read -rp "The latest version in the repo is ${V_DEB_VER} which is already installed. Continue? (y/n)" Q_SAME_VER_CONTINUE
+   read -rp "The latest version in the snapcraft.io repo is ${V_HTTP_VERSION} which is already installed. Continue? (y/n)" Q_SAME_VER_CONTINUE
     case $Q_SAME_VER_CONTINUE in
 
       y ) echo "ok"
@@ -339,7 +335,7 @@ cat << EOF > "${V_SPECS_DIR}"/spotify.spec
 #
 
 Name:   ${V_PKGNAME}
-Version:  ${V_DEB_VER}
+Version:  ${V_HTTP_VERSION}
 Release:  0
 License:  https://www.spotify.com/legal/end-user-agreement
 Summary:  Spotify streaming music client
@@ -447,9 +443,9 @@ fi
 
 
 f_rpm_install() {
-echo "Installing ${V_PKGNAME}-${V_DEB_VER}"
-if ! sudo zypper --non-interactive --no-gpg-checks in "${V_RPMS_DIR}"/"${V_RPM_ARCH}"/"${V_PKGNAME}"-"${V_DEB_VER}"*"${V_RPM_ARCH}".rpm; then
-  f_error "Failed to install ${V_PKGNAME}-${V_DEB_VER}"
+echo "Installing ${V_PKGNAME}-${V_HTTP_VERSION}"
+if ! sudo zypper --non-interactive --no-gpg-checks in "${V_RPMS_DIR}"/"${V_RPM_ARCH}"/"${V_PKGNAME}"-"${V_HTTP_VERSION}"*"${V_RPM_ARCH}".rpm; then
+  f_error "Failed to install ${V_PKGNAME}-${V_HTTP_VERSION}"
 fi
 }
 
@@ -543,10 +539,9 @@ while [ "$1" != "" ]; do
                         f_logo
                         f_install_build_deps
                         f_create_rpmbuild_dirs
-                        f_set_deb_ver
                         f_ver_compare
                         f_download
-                        f_extract_deb
+                        f_extract_snap
                         f_prepare_src
                         f_rpm_spec
                         f_run_build
@@ -557,10 +552,9 @@ while [ "$1" != "" ]; do
                         break
                         ;;
     --scheduled | -scheduled )  V_RUN_MODE="scheduled"
-                        f_set_deb_ver
                         f_ver_compare
                         f_download
-                        f_extract_deb
+                        f_extract_snap
                         f_prepare_src
                         f_rpm_spec
                         f_run_build
@@ -595,10 +589,9 @@ V_RUN_MODE="prompt"
  f_logo
  f_install_build_deps
  f_create_rpmbuild_dirs
- f_set_deb_ver
  f_ver_compare
  f_download
- f_extract_deb
+ f_extract_snap
  f_prepare_src
  f_rpm_spec
  f_run_build

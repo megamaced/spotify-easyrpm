@@ -16,9 +16,6 @@ V_CONFIG_FILE="${HOME}/.${V_PRG_NAME}"
 V_SYS_ARCH="$(uname -i)"
 
 V_PKGNAME="spotify-client"
-V_HTTP_REPO="$(curl -s -H 'Snap-Device-Series: 16' http://api.snapcraft.io/v2/snaps/info/spotify | jq -r '."channel-map"[] | select(.channel.name=="stable") | .download.url')"
-V_HTTP_VERSION="$(curl -s -H 'Snap-Device-Series: 16' http://api.snapcraft.io/v2/snaps/info/spotify | jq -r '."channel-map"[] | select(.channel.name=="stable") | .version')"
-V_HTTP_SNAP="$(basename ${V_HTTP_REPO})"
 
 V_TOPDIR=$(rpm --eval '%{_topdir}')
 V_SOURCES_DIR="${V_TOPDIR}/SOURCES"
@@ -125,16 +122,56 @@ f_arch_check() {
 f_config() {
  if [ -f "${V_CONFIG_FILE}" ]; then
   source "${V_CONFIG_FILE}"
+  if [ -z "${PREF_CHANNEL}" ]; then
+  echo "PREF_CHANNEL=stable" >> "${V_CONFIG_FILE}"
+  source "${V_CONFIG_FILE}"
+  fi
+  if [ -z "${PREF_PROMPT_CHANNEL}" ]; then
+  echo "PREF_PROMPT_CHANNEL=YES" >> "${V_CONFIG_FILE}"
+  source "${V_CONFIG_FILE}"
+  fi
  else
   cat << EOF > "${V_CONFIG_FILE}"
 
 # PREFS
 PREF_PROMPT_SCHEDULE=YES
+PREF_PROMPT_CHANNEL=YES
+PREF_CHANNEL=stable
 
 EOF
+source "${V_CONFIG_FILE}"
  fi
 }
 
+
+f_release_channel() {
+if [[ "${PREF_PROMPT_CHANNEL}" == "YES" ]] && [[ "${V_RUN_MODE}" == "prompt" ]]; then
+  while true
+   do
+    read -rp "Do you wish to download the Spotify stable or edge release (s/e)?" Q_RELEASE_CHANNEL
+
+  case $Q_RELEASE_CHANNEL in
+  s )  sed -i "s/\(PREF_PROMPT_CHANNEL=\)\(.*\)/\1NO/" "${V_CONFIG_FILE}"
+       sed -i "s/\(PREF_CHANNEL=\)\(.*\)/\1stable/" "${V_CONFIG_FILE}"
+       source "${V_CONFIG_FILE}"
+       echo "You can change this setting again in ${V_CONFIG_FILE}"
+       sleep 3
+   break;;
+
+  e )  sed -i "s/\(PREF_PROMPT_CHANNEL=\)\(.*\)/\1NO/" "${V_CONFIG_FILE}"
+       sed -i "s/\(PREF_CHANNEL=\)\(.*\)/\1edge/" "${V_CONFIG_FILE}"
+       source "${V_CONFIG_FILE}"
+       echo "You can change this setting again in ${V_CONFIG_FILE}"
+       sleep 3
+   break;;
+
+  esac
+ done
+ fi 
+V_HTTP_REPO="$(curl -s -H 'Snap-Device-Series: 16' http://api.snapcraft.io/v2/snaps/info/spotify | jq -r '."channel-map"[] | select(.channel.name=='\"$PREF_CHANNEL\"') | .download.url')"
+V_HTTP_VERSION="$(curl -s -H 'Snap-Device-Series: 16' http://api.snapcraft.io/v2/snaps/info/spotify | jq -r '."channel-map"[] | select(.channel.name=='\"$PREF_CHANNEL\"') | .version')"
+V_HTTP_SNAP="$(basename ${V_HTTP_REPO})"
+}
 
 f_download() {
 echo "Downloading the latest Spotify snap"
@@ -539,6 +576,7 @@ while [ "$1" != "" ]; do
                         f_logo
                         f_install_build_deps
                         f_create_rpmbuild_dirs
+                        f_release_channel
                         f_ver_compare
                         f_download
                         f_extract_snap
@@ -552,6 +590,7 @@ while [ "$1" != "" ]; do
                         break
                         ;;
     --scheduled | -scheduled )  V_RUN_MODE="scheduled"
+                        f_release_channel
                         f_ver_compare
                         f_download
                         f_extract_snap
@@ -589,6 +628,7 @@ V_RUN_MODE="prompt"
  f_logo
  f_install_build_deps
  f_create_rpmbuild_dirs
+ f_release_channel
  f_ver_compare
  f_download
  f_extract_snap

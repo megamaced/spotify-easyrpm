@@ -208,7 +208,7 @@ fi
 
 f_extract_snap() {
 echo "Extracting snap and preparing"
-unsquashfs -q -d "${V_SNAP_EXTRACT_DIR}" "${V_SOURCES_DIR}"/"${V_HTTP_SNAP}" || f_error "Failed to extract snap"
+unsquashfs -d "${V_SNAP_EXTRACT_DIR}"  "${V_SOURCES_DIR}"/"${V_HTTP_SNAP}" || f_error "Failed to extract snap"
 mkdir -p "${V_SOURCES_DIR}"/"${V_PKGNAME}"/usr/{share/applications,share/doc,bin}
 mv "${V_SNAP_EXTRACT_DIR}"/usr/share/spotify "${V_SOURCES_DIR}"/"${V_PKGNAME}"/usr/share
 mv "${V_SNAP_EXTRACT_DIR}"/usr/bin/spotify "${V_SOURCES_DIR}"/"${V_PKGNAME}"/usr/bin
@@ -297,6 +297,12 @@ if ! rpm -q squashfs > /dev/null 2>&1; then
  echo "Installing build dependencies (squashfs)"
  if ! sudo zypper --non-interactive in squashfs; then
  f_error "Failed to install build dependencies (squashfs). Aborting"
+ fi
+fi
+if ! rpm -q jq > /dev/null 2>&1; then
+ echo "Installing build dependencies (jq)"
+ if ! sudo zypper --non-interactive in jq; then
+ f_error "Failed to install build dependencies (jq). Aborting"
  fi
 fi
 }

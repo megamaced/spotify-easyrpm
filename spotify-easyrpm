@@ -238,7 +238,7 @@ echo "Checking for an existing schedule"
       f_script_location_check
       break;;
 
-  n ) echo "Ok skipping...If you want to create this in the future just run ${V_PRG_NAME} -create-schedule"
+  n ) echo "Ok skipping...If you want to create this in the future just run ${V_PRG_NAME} --create-schedule"
       sed -i "s/\(PREF_PROMPT_SCHEDULE=\)\(.*\)/\1NO/" "${V_CONFIG_FILE}"
       break;;
 

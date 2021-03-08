@@ -35,6 +35,13 @@ $> spotify-easyrpm --quiet
   - Set up a local filesystem repo
 
 ```bash
+$> spotify-easyrpm --set-channel edge
+```
+
+  - Set either "edge" or "stable" version of Spotify client
+
+
+```bash
 $> spotify-easyrpm --create-schedule
 ```
 

@@ -1,12 +1,5 @@
 #!/bin/bash
 #
-# spotify-easyrpm is a script which can download the latest Spotify snap package from snapcraft.io
-# repository and convert it into an RPM. It is also capable of installing, scheduling and storing
-# the RPMs in a local filesystem repo for installing Spotify updates alongside regular system updates
-#
-# Run "spotify-easyrpm --help" for more info
-#
-
 #set -x
 
 
@@ -38,14 +31,15 @@ cat <<EOF
 ┌─┐┌─┐┌─┐┌┬┐┬┌─┐┬ ┬   ┌─┐┌─┐┌─┐┬ ┬┬─┐┌─┐┌┬┐
 └─┐├─┘│ │ │ │├┤ └┬┘───├┤ ├─┤└─┐└┬┘├┬┘├─┘│││
 └─┘┴  └─┘ ┴ ┴└   ┴    └─┘┴ ┴└─┘ ┴ ┴└─┴  ┴ ┴
-Snap Edition (beta)
+Version: 3.0.0
 EOF
 sleep 2
 cat <<EOF
-VERSION: 3.0.0
+Spotify RPM tool for openSUSE / SLE
 SUPPORT: https://github.com/megamaced/spotify-easyrpm/issues
 
 MODE: ${V_RUN_MODE}
+CHANNEL: ${PREF_CHANNEL}
 EOF
 }
 
@@ -68,6 +62,10 @@ the RPMs in a local filesystem repo for installing Spotify updates alongside reg
   - Install the Spotify RPM
   - Set up a daily scheduled update job
   - Set up a local filesystem repo
+
+ ${V_PRG_NAME} --set-channel edge
+
+  - Set either "edge" or "stable" version of Spotify client
 
  ${V_PRG_NAME} --create-schedule
 
@@ -126,6 +124,10 @@ f_config() {
   echo "PREF_CHANNEL=stable" >> "${V_CONFIG_FILE}"
   source "${V_CONFIG_FILE}"
   fi
+  if [[ ! "${PREF_CHANNEL}" == "stable" ]] && [[ ! "${PREF_CHANNEL}" == "edge" ]]; then
+  sed -i "s/\(PREF_CHANNEL=\)\(.*\)/\1stable/" "${V_CONFIG_FILE}"
+  source "${V_CONFIG_FILE}"
+  fi
   if [ -z "${PREF_PROMPT_CHANNEL}" ]; then
   echo "PREF_PROMPT_CHANNEL=YES" >> "${V_CONFIG_FILE}"
   source "${V_CONFIG_FILE}"
@@ -154,14 +156,14 @@ if [[ "${PREF_PROMPT_CHANNEL}" == "YES" ]] && [[ "${V_RUN_MODE}" == "prompt" ]];
   s )  sed -i "s/\(PREF_PROMPT_CHANNEL=\)\(.*\)/\1NO/" "${V_CONFIG_FILE}"
        sed -i "s/\(PREF_CHANNEL=\)\(.*\)/\1stable/" "${V_CONFIG_FILE}"
        source "${V_CONFIG_FILE}"
-       echo "You can change this setting again in ${V_CONFIG_FILE}"
+       echo "Use --set-channel option to change it again"
        sleep 3
    break;;
 
   e )  sed -i "s/\(PREF_PROMPT_CHANNEL=\)\(.*\)/\1NO/" "${V_CONFIG_FILE}"
        sed -i "s/\(PREF_CHANNEL=\)\(.*\)/\1edge/" "${V_CONFIG_FILE}"
        source "${V_CONFIG_FILE}"
-       echo "You can change this setting again in ${V_CONFIG_FILE}"
+       echo "Use --set-channel option to change it again"
        sleep 3
    break;;
 
@@ -323,16 +325,33 @@ EOF
 
 
 f_ver_compare() {
+V_HTTP_VERSION_NUM="$( echo ${V_HTTP_VERSION} | sed 's/\.[^.]*$//' | sed 's/\.//g' )"
+V_INSTALL_VERSION_NUM="$( rpm -q "${V_PKGNAME}" | cut -f3 -d"-" | sed 's/\.[^.]*$//' | sed 's/\.//g' )"
+declare -a V_REPO_VERSION_NUMS="$( find ${V_LOCAL_REPO} -type f -name "*.rpm" | sort | cut -f4 -d"-" | sed 's/\.[^.]*$//' | sed 's/\.//g' )"
+
 echo "Comparing snapcraft.io repo version to installed or local machine repo version (if any)"
-if [[ "$(rpm -q "${V_PKGNAME}" | cut -f3 -d"-")" == "${V_HTTP_VERSION}" ]] || [[ "$(find ${V_LOCAL_REPO} -type f -name "*.rpm" | sort | tail -n1 | cut -f4 -d"-")" == "${V_HTTP_VERSION}" ]] ; then
+
+for V_REPO_VERSION_NUM in ${V_REPO_VERSION_NUMS[@]}; do
+if [[ $V_HTTP_VERSION_NUM == $V_REPO_VERSION_NUM ]] || [[ $V_HTTP_VERSION_NUM -lt $V_REPO_VERSION_NUM ]]; then
+V_MATCHEDVERSION=TRUE
+break
+fi
+done
+
+if [[ $V_HTTP_VERSION_NUM == $V_INSTALL_VERSION_NUM ]]; then
+V_MATCHEDVERSION=TRUE
+fi
+
+if [[ "${V_MATCHEDVERSION}" == "TRUE" ]]; then
  if [[ "${V_RUN_MODE}" != "prompt" ]]; then
-  echo "spotify-client ${V_HTTP_VERSION} is already installed or available from local machine repo. Quitting"
+  echo "${V_PKGNAME} ${V_HTTP_VERSION} is already installed or available from local machine repo. Quitting"
   f_cleanup
   exit 0
  else
  while true
   do
-   read -rp "The latest version in the snapcraft.io repo is ${V_HTTP_VERSION} which is already installed. Continue? (y/n)" Q_SAME_VER_CONTINUE
+   echo "The latest $PREF_CHANNEL version at snapcraft.io is ${V_HTTP_VERSION} which is already installed or available from local machine repo. "
+   read -rp "Continue anyway? (y/n)" Q_SAME_VER_CONTINUE
     case $Q_SAME_VER_CONTINUE in
 
       y ) echo "ok"
@@ -549,7 +568,7 @@ systemctl --user enable "${V_PRG_NAME}.timer"
 
 f_update_local_repo() {
 if [[ "${V_RUN_MODE}" != "clean-repo" ]]; then
-echo "Moving RPMs from your rpmbuild ${V_RPMS_DIR} to your local repo ${V_LOCAL_REPO}"
+echo "Moving any Spotify RPMs from your rpmbuild ${V_RPMS_DIR} to your local repo ${V_LOCAL_REPO}"
 find "${V_RPMS_DIR}"/"${V_RPM_ARCH}"/ -name "${V_PKGNAME}-*${V_RPM_ARCH}.rpm" -type f -exec mv -t "${V_LOCAL_REPO}" {} \+
 fi
 if ! createrepo -q "${V_LOCAL_REPO}"; then
@@ -560,6 +579,11 @@ fi
 f_clean_repo() {
 sudo find "${V_LOCAL_REPO}" -type f -name "*.rpm" -exec rm {} \;
 f_update_local_repo
+echo "done!"
+}
+
+f_set_channel() {
+sed -i "s/\(PREF_CHANNEL=\)\(.*\)/\1$PREF_CHANNEL/" "${V_CONFIG_FILE}"
 echo "done!"
 }
 
@@ -614,6 +638,13 @@ while [ "$1" != "" ]; do
     --clean-repo )      V_RUN_MODE="clean-repo"
                         f_logo
                         f_clean_repo
+                        break
+                        ;;
+    --set-channel )     V_RUN_MODE="set-channel"
+                        shift
+                        PREF_CHANNEL="$1"
+                        f_logo
+                        f_set_channel
                         break
                         ;;
     * )                 V_RUN_MODE="invalid"

@@ -118,22 +118,10 @@ f_arch_check() {
 
 
 f_config() {
- if [ -f "${V_CONFIG_FILE}" ]; then
-  source "${V_CONFIG_FILE}"
-  if [ -z "${PREF_CHANNEL}" ]; then
-  echo "PREF_CHANNEL=stable" >> "${V_CONFIG_FILE}"
-  source "${V_CONFIG_FILE}"
-  fi
-  if [[ ! "${PREF_CHANNEL}" == "stable" ]] && [[ ! "${PREF_CHANNEL}" == "edge" ]]; then
-  sed -i "s/\(PREF_CHANNEL=\)\(.*\)/\1stable/" "${V_CONFIG_FILE}"
-  source "${V_CONFIG_FILE}"
-  fi
-  if [ -z "${PREF_PROMPT_CHANNEL}" ]; then
-  echo "PREF_PROMPT_CHANNEL=YES" >> "${V_CONFIG_FILE}"
-  source "${V_CONFIG_FILE}"
-  fi
- else
-  cat << EOF > "${V_CONFIG_FILE}"
+if [ -f "${V_CONFIG_FILE}" ]; then
+ source "${V_CONFIG_FILE}"
+else
+ cat << EOF > "${V_CONFIG_FILE}"
 
 # PREFS
 PREF_PROMPT_SCHEDULE=YES
@@ -142,7 +130,20 @@ PREF_CHANNEL=stable
 
 EOF
 source "${V_CONFIG_FILE}"
- fi
+fi
+
+if [ -z "${PREF_CHANNEL}" ]; then
+ echo "PREF_CHANNEL=stable" >> "${V_CONFIG_FILE}"
+ source "${V_CONFIG_FILE}"
+fi
+if [[ ! "${PREF_CHANNEL}" == "stable" ]] && [[ ! "${PREF_CHANNEL}" == "edge" ]]; then
+ sed -i "s/\(PREF_CHANNEL=\)\(.*\)/\1stable/" "${V_CONFIG_FILE}"
+ source "${V_CONFIG_FILE}"
+fi
+if [ -z "${PREF_PROMPT_CHANNEL}" ]; then
+ echo "PREF_PROMPT_CHANNEL=YES" >> "${V_CONFIG_FILE}"
+ source "${V_CONFIG_FILE}"
+fi
 }
 
 
@@ -584,6 +585,7 @@ echo "done!"
 
 f_set_channel() {
 sed -i "s/\(PREF_CHANNEL=\)\(.*\)/\1$PREF_CHANNEL/" "${V_CONFIG_FILE}"
+sed -i "s/\(PREF_PROMPT_CHANNEL=\)\(.*\)/\1NO/" "${V_CONFIG_FILE}"
 echo "done!"
 }
 

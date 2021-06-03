@@ -88,7 +88,7 @@ $> spotify-easyrpm --clean-repo
 
  ### Download links (One Click Install)
 
- * [SLE 15](https://software.opensuse.org/ymp/home:megamaced:spotify-easyrpm/SLE_15/spotify-easyrpm.ymp?base=SUSE%3ASLE-15%3AGA&query=spotify-easyrpm)
  * [openSUSE 15.1](https://software.opensuse.org/ymp/multimedia:apps/openSUSE_Leap_15.1/spotify-easyrpm.ymp?base=openSUSE%3ALeap%3A15.1&query=spotify-easyrpm)
  * [openSUSE 15.2](https://software.opensuse.org/ymp/multimedia:apps/openSUSE_Leap_15.2/spotify-easyrpm.ymp?base=openSUSE%3ALeap%3A15.2&query=spotify-easyrpm)
+ * openSUSE 15.3 / SLE 15 SP3: `zypper install spotify-easyrpm`
  * openSUSE Tumbleweed: `zypper install spotify-easyrpm`

@@ -31,7 +31,7 @@ cat <<EOF
 ┌─┐┌─┐┌─┐┌┬┐┬┌─┐┬ ┬   ┌─┐┌─┐┌─┐┬ ┬┬─┐┌─┐┌┬┐
 └─┐├─┘│ │ │ │├┤ └┬┘───├┤ ├─┤└─┐└┬┘├┬┘├─┘│││
 └─┘┴  └─┘ ┴ ┴└   ┴    └─┘┴ ┴└─┘ ┴ ┴└─┴  ┴ ┴
-Version: 3.0.1
+Version: 3.0.2
 EOF
 sleep 2
 cat <<EOF
@@ -408,25 +408,25 @@ Source:   %{name}-%{version}.tar.gz
 BuildRoot:  %{_tmppath}/%{name}-%{version}-build
 BuildRequires:  update-desktop-files
 Requires: libasound2
+Requires: libatk-bridge-2_0-0
 Requires: libatomic1
 Requires: libcurl4
+Requires: libgbm1
 Requires: gconf2
-Requires: libgtk-2_0-0
 Requires: libglib-2_0-0
-Requires: libgcrypt20
+Requires: libgtk-3-0
 Requires: mozilla-nss
-Requires: libudev1
-Requires: libX11-6
-Requires: libXtst6
 %if 0%{?sle_version} <= 150000 && 0%{?is_opensuse} || 0%{?sle_version} <= 150000 && !0%{?is_opensuse}
 Requires: libopenssl1_0_0
 %else
 Requires: libopenssl1_1
 %endif
+Requires: libxshmfence1
+Requires: libXss1
+Requires: libXtst6
 Requires: xdg-utils
-Recommends: libavcodec56
-Recommends: libavformat56
-Recommends: zenity
+Recommends: libavcodec.so
+Recommends: libavformat.so
 Suggests: libnotify4
 AutoReq:  no
 

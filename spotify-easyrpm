@@ -412,7 +412,6 @@ Requires: libatk-bridge-2_0-0
 Requires: libatomic1
 Requires: libcurl4
 Requires: libgbm1
-Requires: gconf2
 Requires: libglib-2_0-0
 Requires: libgtk-3-0
 Requires: mozilla-nss

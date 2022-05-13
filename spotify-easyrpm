@@ -2,7 +2,6 @@
 #
 #set -x
 
-
 V_PRG_NAME="spotify-easyrpm"
 V_CONFIG_FILE="${HOME}/.${V_PRG_NAME}"
 
@@ -31,11 +30,11 @@ cat <<EOF
 ┌─┐┌─┐┌─┐┌┬┐┬┌─┐┬ ┬   ┌─┐┌─┐┌─┐┬ ┬┬─┐┌─┐┌┬┐
 └─┐├─┘│ │ │ │├┤ └┬┘───├┤ ├─┤└─┐└┬┘├┬┘├─┘│││
 └─┘┴  └─┘ ┴ ┴└   ┴    └─┘┴ ┴└─┘ ┴ ┴└─┴  ┴ ┴
-Version: 3.0.3
+Version: 4.0.0-dev
 EOF
 sleep 2
 cat <<EOF
-Spotify RPM tool for openSUSE / SLE
+Spotify RPM tool for various RPM distributions
 SUPPORT: https://github.com/megamaced/spotify-easyrpm/issues
 
 MODE: ${V_RUN_MODE}
@@ -116,6 +115,41 @@ f_arch_check() {
  fi
 }
 
+f_set_zypper() {
+    V_PKGMGR="zypper"
+    V_PKGMGRINST="zypper --non-interactive --quiet in"
+    V_PKGMGRINSTNOGPG="zypper --non-interactive --quiet --no-gpg-checks in"
+    V_PKGMGRADDREPO="zypper ar -G --refresh"
+    V_REPODIR="/etc/zypp/repos.d"
+    V_PKGRPMBUILD="rpm-build"
+    V_PKGSQUASHFS="squashfs"
+    V_PKGJQ="jq"
+    V_PKGCREATEREPO="createrepo_c"
+
+}
+
+f_set_dnf() {
+    V_PKGMGR="dnf"
+    V_PKGMGRINST="dnf install -y --quiet"
+    V_PKGMGRINSTNOGPG="dnf install -y --nogpgcheck --quiet"
+    V_PKGMGRADDREPO="dnf config-manager --nogpgcheck --add-repo"
+    V_REPODIR="/etc/yum.repos.d"
+    V_PKGRPMBUILD="rpm-build"
+    V_PKGSQUASHFS="squashfs-tools"
+    V_PKGJQ="jq"
+    V_PKGCREATEREPO="createrepo_c"
+}
+
+
+f_packagemanager() {
+  if test -e /usr/bin/zypper; then
+    f_set_zypper
+  elif test -e /usr/bin/dnf; then
+    f_set_dnf
+  else
+    f_error "could not detect package manager"
+  fi
+}
 
 f_config() {
 if [ -f "${V_CONFIG_FILE}" ]; then
@@ -270,9 +304,9 @@ f_remove_schedule() {
 }
 
 f_remove_repo() {
- if [[ -f /etc/zypp/repos.d/${V_PRG_NAME}.repo ]]; then
-  echo "Removing ${V_PRG_NAME} zypper repo"
-  sudo zypper rr "${V_PRG_NAME}"
+ if [[ -f ${V_REPODIR}/${V_PRG_NAME}.repo ]]; then
+  echo "Removing ${V_PRG_NAME} repo"
+  sudo rm ${V_REPODIR}/${V_PRG_NAME}.repo
  fi
  if [[ -d "${V_LOCAL_REPO}" ]]; then
   echo "Removing ${V_PRG_NAME} repo from filesystem"
@@ -281,28 +315,22 @@ f_remove_repo() {
 }
 
 f_install_build_deps() {
-if ! rpm -q rpm-build > /dev/null 2>&1; then
- echo "Installing build dependencies (rpm-build)"
- if ! sudo zypper --non-interactive in rpm-build; then
- f_error "Failed to install build dependencies (rpm-build). Aborting"
+if ! rpm -q "${V_PKGRPMBUILD}" > /dev/null 2>&1; then
+ echo "Installing build dependencies (${V_PKGRPMBUILD})"
+ if ! sudo ${V_PKGMGRINST} "${V_PKGRPMBUILD}"; then
+ f_error "Failed to install build dependencies (${V_PKGRPMBUILD}). Aborting"
  fi
 fi
-if ! rpm -q update-desktop-files > /dev/null 2>&1; then
- echo "Installing build dependencies (update-desktop-files)"
- if ! sudo zypper --non-interactive in update-desktop-files; then
- f_error "Failed to install build dependencies (update-desktop-files). Aborting"
+if ! rpm -q "${V_PKGSQUASHFS}" > /dev/null 2>&1; then
+ echo "Installing build dependencies (${V_PKGSQUASHFS})"
+ if ! sudo ${V_PKGMGRINST} "${V_PKGSQUASHFS}"; then
+ f_error "Failed to install build dependencies (${V_PKGSQUASHFS}). Aborting"
  fi
 fi
-if ! rpm -q squashfs > /dev/null 2>&1; then
- echo "Installing build dependencies (squashfs)"
- if ! sudo zypper --non-interactive in squashfs; then
- f_error "Failed to install build dependencies (squashfs). Aborting"
- fi
-fi
-if ! rpm -q jq > /dev/null 2>&1; then
- echo "Installing build dependencies (jq)"
- if ! sudo zypper --non-interactive in jq; then
- f_error "Failed to install build dependencies (jq). Aborting"
+if ! rpm -q "${V_PKGJQ}" > /dev/null 2>&1; then
+ echo "Installing build dependencies (${V_PKGJQ})"
+ if ! sudo ${V_PKGMGRINST} "${V_PKGJQ}"; then
+ f_error "Failed to install build dependencies (${V_PKGJQ}). Aborting"
  fi
 fi
 }
@@ -378,12 +406,12 @@ fi
 
 f_rpm_spec() {
 echo "Writing new build file"
-
+if [[ "${V_PKGMGR}" == "zypper" ]]; then
 cat << EOF > "${V_SPECS_DIR}"/spotify.spec
 #
 # spec file for package ${V_PKGNAME}
 #
-# Copyright (c) 2018 SUSE LINUX Products GmbH, Nuernberg, Germany.
+# Copyright (c) 2022 SUSE LINUX Products GmbH, Nuernberg, Germany.
 #
 # All modifications and additions to the file contributed by third parties
 # remain the property of their copyright owners, unless otherwise agreed
@@ -406,7 +434,6 @@ Vendor:   Spotify AB
 Url:    https://www.spotify.com
 Source:   %{name}-%{version}.tar.gz
 BuildRoot:  %{_tmppath}/%{name}-%{version}-build
-BuildRequires:  update-desktop-files
 Requires: libasound2
 Requires: libatk-bridge-2_0-0
 Requires: libatomic1
@@ -450,15 +477,11 @@ cp -r usr %{buildroot}/
 
 %post
 
-%desktop_database_post
-
 if [[ ! -f %{_libdir}/libcurl-gnutls.so.4 ]]; then
  ln -s %{_libdir}/libcurl.so.4 %{_libdir}/libcurl-gnutls.so.4
 fi
 
 %postun
-
-%desktop_database_postun
 
 %clean
 
@@ -470,6 +493,73 @@ fi
 %{_datadir}/doc/${V_PKGNAME}/*
 %{_bindir}/spotify
 EOF
+elif [[ "${V_PKGMGR}" == "dnf" ]]; then
+cat << EOF > "${V_SPECS_DIR}"/spotify.spec
+Name:   ${V_PKGNAME}
+Version:  ${V_HTTP_VERSION}
+Release:  0
+License:  https://www.spotify.com/legal/end-user-agreement
+Summary:  Spotify streaming music client
+Vendor:   Spotify AB
+Url:    https://www.spotify.com
+Source:   %{name}-%{version}.tar.gz
+BuildRoot:  %{_tmppath}/%{name}-%{version}-build
+Requires: lib64alsa2
+Requires: lib64atk-bridge2.0_0
+Requires: libatomic1
+Requires: lib64curl4
+Requires: lib64gbm1
+Requires: lib64glib2.0_0
+Requires: lib64gtk+3_0
+Requires: nss
+Requires: lib64openssl1.1
+Requires: lib64xshmfence1
+Requires: lib64xscrnsaver1
+Requires: lib64xtst6
+Requires: xdg-utils
+Recommends: lib64avcodec58
+Recommends: lib64avformat58
+Suggests: libnotify4
+AutoReq:  no
+
+%description
+The Spotify desktop client unofficially supports Linux, meaning that there is a
+native client for Linux but we do not offer official support for client-related
+problems on this platform. If you are having severe problems with the native
+Linux client, there are a few alternatives that you can try:
+
+- Using the web player: https://play.spotify.com (requires Adobe Flash plugin)
+- Running the native Windows client in Wine (not recommended, but should work)
+
+Otherwise, the native Linux client is the recommended way to listen to Spotify
+on Linux systems.
+
+%prep
+%setup -q -n %{name}
+
+%install
+mkdir -p %{buildroot}%{_prefix}
+cp -r usr %{buildroot}/
+
+%post
+
+if [[ ! -f %{_libdir}/libcurl-gnutls.so.4 ]]; then
+ ln -s %{_libdir}/libcurl.so.4 %{_libdir}/libcurl-gnutls.so.4
+fi
+
+%postun
+
+%clean
+
+%files
+%defattr(-,root,root)
+%dir %{_datadir}/spotify
+%{_datadir}/spotify/*
+%{_datadir}/applications/spotify.desktop
+%{_datadir}/doc/${V_PKGNAME}/*
+%{_bindir}/spotify
+EOF
+fi
 }
 
 
@@ -506,17 +596,17 @@ fi
 
 f_rpm_install() {
 echo "Installing ${V_PKGNAME}-${V_HTTP_VERSION}"
-if ! sudo zypper --non-interactive --no-gpg-checks in "${V_RPMS_DIR}"/"${V_RPM_ARCH}"/"${V_PKGNAME}"-"${V_HTTP_VERSION}"*"${V_RPM_ARCH}".rpm; then
+if ! sudo ${V_PKGMGRINSTNOGPG} "${V_RPMS_DIR}"/"${V_RPM_ARCH}"/"${V_PKGNAME}"-"${V_HTTP_VERSION}"*"${V_RPM_ARCH}".rpm; then
   f_error "Failed to install ${V_PKGNAME}-${V_HTTP_VERSION}"
 fi
 }
 
 
 f_create_repo() {
-if ! rpm -q createrepo_c > /dev/null 2>&1; then
- echo "Installing CreateRepo for local filesystem repo"
- if ! sudo zypper --non-interactive in createrepo_c; then
- f_error "Failed to install createrepo. Aborting"
+if ! rpm -q "${V_PKGCREATEREPO}" > /dev/null 2>&1; then
+ echo "Installing ${V_PKGCREATEREPO} for local filesystem repo"
+ if ! sudo ${V_PKGMGRINST} "${V_PKGCREATEREPO}"; then
+ f_error "Failed to install ${V_PKGCREATEREPO}. Aborting"
  fi
 fi
 if [[ ! -d "${V_LOCAL_REPO}" ]]; then
@@ -532,10 +622,10 @@ if ! sudo find ${V_LOCAL_REPO} -type f -exec chmod 666 {} \+; then
  f_error "Failed to chmod ${V_LOCAL_REPO}"
 fi
 f_update_local_repo
-if [[ ! -f /etc/zypp/repos.d/${V_PRG_NAME}.repo ]]; then
- echo "Adding local file system repository to zypper"
- if ! sudo zypper ar -G --refresh "${V_LOCAL_REPO}" "${V_PRG_NAME}"; then
-  f_error "Failed to add local repo to zypper. Aborting"
+if [[ ! -f "${V_REPODIR}"/"${V_PRG_NAME}".repo ]]; then
+ echo "Adding local file system repository"
+ if ! sudo ${V_PKGMGRADDREPO} "${V_LOCAL_REPO}" "${V_PRG_NAME}"; then
+  f_error "Failed to add local repo. Aborting"
  fi
 fi
 }
@@ -583,9 +673,13 @@ fi
 }
 
 f_clean_repo() {
-sudo find "${V_LOCAL_REPO}" -type f -name "*.rpm" -exec rm {} \;
-f_update_local_repo
-echo "done!"
+if [[ -d "${V_LOCAL_REPO}" ]]; then
+  sudo find "${V_LOCAL_REPO}" -type f -name "*.rpm" -exec rm {} \;
+  f_update_local_repo
+  echo "done!"
+else
+  echo "no local repo found"
+fi
 }
 
 f_set_channel() {
@@ -684,6 +778,7 @@ fi
 
 f_root_check
 f_arch_check
+f_packagemanager
 f_config
 f_cleanup
 f_main "$@"

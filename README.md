@@ -85,6 +85,8 @@ journalctl --user-unit spotify-easyrpm
 ### How to install
 
 
-* openSUSE : `zypper install spotify-easyrpm`
-* mageia : 'dnf config-manager --add-repo https://download.opensuse.org/repositories/home:/megamaced:/mageia/Mageia_8/home:megamaced:mageia.repo'
-           'dnf install spotify-easyrpm'
+* openSUSE : 
+`zypper install spotify-easyrpm`
+* mageia : 
+`dnf config-manager --add-repo https://download.opensuse.org/repositories/home:/megamaced:/mageia/Mageia_8/home:megamaced:mageia.repo`
+`dnf install spotify-easyrpm`

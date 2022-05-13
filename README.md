@@ -55,7 +55,8 @@ $> spotify-easyrpm --clean-repo
 ## Requirements
 
 * openSUSE Leap / SLE, or Tumbleweed
-* Support for other RPM-based systems is being considered
+* Mageia
+* Other RPM distros may work but not tested yet
 
 ## Auto Updates
 
@@ -85,4 +86,5 @@ journalctl --user-unit spotify-easyrpm
 
 
 * openSUSE : `zypper install spotify-easyrpm`
-* mageia : coming soon
+* mageia : 'dnf config-manager --add-repo https://download.opensuse.org/repositories/home:/megamaced:/mageia/Mageia_8/home:megamaced:mageia.repo'
+           'dnf install spotify-easyrpm'

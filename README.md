@@ -2,7 +2,7 @@
 
 ![img](https://i.imgur.com/y0tDlYD.png)
 
-Spotify-EasyRPM is a script which automates the installing and updating of Spotify on RPM-based Linux systems
+Spotify-EasyRPM is a script which automates the installing and updating of Spotify on openSUSE / SLE
 
 ## Features
 
@@ -55,7 +55,6 @@ $> spotify-easyrpm --clean-repo
 ## Requirements
 
 * openSUSE Leap / SLE, or Tumbleweed
-* Support for other RPM-based systems is being considered
 
 ## Auto Updates
 
@@ -83,6 +82,4 @@ journalctl --user-unit spotify-easyrpm
 
 ### How to install
 
-
 * openSUSE : `zypper install spotify-easyrpm`
-* mageia : coming soon

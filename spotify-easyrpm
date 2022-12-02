@@ -178,7 +178,7 @@ V_HTTP_SNAP="$(basename ${V_HTTP_REPO})"
 
 f_download() {
 echo "Downloading the latest Spotify snap"
-if ! wget -P "${V_SOURCES_DIR}"/ "${V_HTTP_REPO}"; then
+if ! wget -q -P "${V_SOURCES_DIR}"/ "${V_HTTP_REPO}"; then
 f_error "Failed to download Spotify. Aborting"
 fi
 }

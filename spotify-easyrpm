@@ -31,7 +31,7 @@ cat <<EOF
 ┌─┐┌─┐┌─┐┌┬┐┬┌─┐┬ ┬   ┌─┐┌─┐┌─┐┬ ┬┬─┐┌─┐┌┬┐
 └─┐├─┘│ │ │ │├┤ └┬┘───├┤ ├─┤└─┐└┬┘├┬┘├─┘│││
 └─┘┴  └─┘ ┴ ┴└   ┴    └─┘┴ ┴└─┘ ┴ ┴└─┴  ┴ ┴
-Version: 3.0.4
+Version: 3.0.5
 EOF
 sleep 2
 cat <<EOF
@@ -423,6 +423,7 @@ Requires: libxshmfence1
 Requires: libXss1
 Requires: libXtst6
 Requires: xdg-utils
+Requires: libayatana-appindicator3-1
 Recommends: libavcodec.so
 Recommends: libavformat.so
 Suggests: libnotify4

@@ -5,7 +5,7 @@
 V_PRG_NAME="spotify-easyrpm"
 V_CONFIG_FILE="${HOME}/.${V_PRG_NAME}"
 
-V_SYS_ARCH="$(uname -i)"
+V_SYS_ARCH="$(uname -m)"
 
 V_PKGNAME="spotify-client"
 

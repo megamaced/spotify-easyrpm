@@ -14,6 +14,11 @@ Spotify-EasyRPM is a script which automates the installing and updating of Spoti
 * Create a local filesystem repo
 * Fully unattended quiet mode
 
+## Who is this for?
+
+Most people should probably just use the Flatpak version, but if you prefer RPMs and/or use a rolling release
+such as Tumbleweed or Slowroll this might be for you
+
 ## Howto
 
 Regular prompt based mode to create an RPM and optionally install and create an update schedule:

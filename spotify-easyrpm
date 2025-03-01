@@ -31,7 +31,7 @@ cat <<EOF
 ┌─┐┌─┐┌─┐┌┬┐┬┌─┐┬ ┬   ┌─┐┌─┐┌─┐┬ ┬┬─┐┌─┐┌┬┐
 └─┐├─┘│ │ │ │├┤ └┬┘───├┤ ├─┤└─┐└┬┘├┬┘├─┘│││
 └─┘┴  └─┘ ┴ ┴└   ┴    └─┘┴ ┴└─┘ ┴ ┴└─┴  ┴ ┴
-Version: 3.0.5
+Version: 3.0.6
 EOF
 sleep 2
 cat <<EOF
@@ -95,11 +95,10 @@ exit 1
 
 f_cleanup() {
 rm "${V_SOURCES_DIR:?}"/*.snap > /dev/null 2>&1
-rm -r "${V_SNAP_EXTRACT_DIR}" > /dev/null 2>&1
-rm -r "${V_SOURCES_DIR:?}"/"${V_PKGNAME}"* > /dev/null 2>&1
-rm -r "${V_BUILDROOT_DIR:?}"/"${V_PKGNAME}"* > /dev/null 2>&1
+rm -rf "${V_SNAP_EXTRACT_DIR:?}" > /dev/null 2>&1
+rm -rf "${V_SOURCES_DIR:?}"/"${V_PKGNAME}"* > /dev/null 2>&1
+rm -rf "${V_BUILDROOT_DIR:?}"/"${V_PKGNAME}"* > /dev/null 2>&1
 }
-
 
 f_root_check() {
  if [[ "$(id -u)" == "0" ]]; then
@@ -171,9 +170,6 @@ if [[ "${PREF_PROMPT_CHANNEL}" == "YES" ]] && [[ "${V_RUN_MODE}" == "prompt" ]];
   esac
  done
  fi 
-V_HTTP_REPO="$(curl -s -H 'Snap-Device-Series: 16' http://api.snapcraft.io/v2/snaps/info/spotify | jq -r '."channel-map"[] | select(.channel.name=='\"$PREF_CHANNEL\"') | .download.url')"
-V_HTTP_VERSION="$(curl -s -H 'Snap-Device-Series: 16' http://api.snapcraft.io/v2/snaps/info/spotify | jq -r '."channel-map"[] | select(.channel.name=='\"$PREF_CHANNEL\"') | .version')"
-V_HTTP_SNAP="$(basename ${V_HTTP_REPO})"
 }
 
 f_download() {
@@ -190,7 +186,7 @@ if ! mkdir -p "${V_TOPDIR}"/{BUILD,BUILDROOT,OTHER,RPMS,SOURCES,SPECS,SRPMS}; th
 f_error "Failed to create rpmbuild root. Aborting"
 fi
 V_RPMBUILD_OWNER_CHECK="$(find "${V_TOPDIR}" -not -user "$(id -u)")"
-if [[ ! -z "${V_RPMBUILD_OWNER_CHECK}" ]]; then
+if [[ -n "${V_RPMBUILD_OWNER_CHECK}" ]]; then
   echo "Detected some directories / files not owned by you. Fixing ${V_RPMBUILD_OWNER_CHECK}"
   for i in ${V_RPMBUILD_OWNER_CHECK}; do
     sudo chown "$(id -u)" "$i"
@@ -216,9 +212,9 @@ mv "${V_SNAP_EXTRACT_DIR}"/usr/bin/spotify "${V_SOURCES_DIR}"/"${V_PKGNAME}"/usr
 
 
 f_script_location_check() {
-if [[ ! -f /usr/bin/"${V_PRG_NAME}" ]] || ! diff ${0} /usr/bin/"${V_PRG_NAME}" > /dev/null 2>&1; then
+if [[ ! -f /usr/bin/"${V_PRG_NAME}" ]] || ! diff "${0}" /usr/bin/"${V_PRG_NAME}" > /dev/null 2>&1; then
  echo "Copying ${V_PRG_NAME} to /usr/bin/${V_PRG_NAME} for the schedule to work"
- sudo cp ${0} /usr/bin/"${V_PRG_NAME}"
+ sudo cp "${0}" /usr/bin/"${V_PRG_NAME}"
 fi
 }
 
@@ -280,30 +276,14 @@ f_remove_repo() {
 }
 
 f_install_build_deps() {
-if ! rpm -q rpm-build > /dev/null 2>&1; then
- echo "Installing build dependencies (rpm-build)"
- if ! sudo zypper --non-interactive in rpm-build; then
- f_error "Failed to install build dependencies (rpm-build). Aborting"
- fi
-fi
-if ! rpm -q update-desktop-files > /dev/null 2>&1; then
- echo "Installing build dependencies (update-desktop-files)"
- if ! sudo zypper --non-interactive in update-desktop-files; then
- f_error "Failed to install build dependencies (update-desktop-files). Aborting"
- fi
-fi
-if ! rpm -q squashfs > /dev/null 2>&1; then
- echo "Installing build dependencies (squashfs)"
- if ! sudo zypper --non-interactive in squashfs; then
- f_error "Failed to install build dependencies (squashfs). Aborting"
- fi
-fi
-if ! rpm -q jq > /dev/null 2>&1; then
- echo "Installing build dependencies (jq)"
- if ! sudo zypper --non-interactive in jq; then
- f_error "Failed to install build dependencies (jq). Aborting"
- fi
-fi
+for pkg in rpm-build update-desktop-files squashfs jq rpmdevtools; do
+  if ! rpm -q "${pkg}" > /dev/null 2>&1; then
+    echo "Installing build dependencies (${pkg})"
+    if ! sudo zypper --non-interactive in "${pkg}"; then
+      f_error "Failed to install build dependencies (${pkg}). Aborting"
+    fi
+  fi
+done
 }
 
 f_prepare_src() {
@@ -331,24 +311,38 @@ EOF
 
 
 f_ver_compare() {
-V_HTTP_VERSION_NUM="$( echo ${V_HTTP_VERSION} | sed 's/\.[^.]*$//' | sed 's/\.//g' )"
-V_INSTALL_VERSION_NUM="$( rpm -q "${V_PKGNAME}" | cut -f3 -d"-" | sed 's/\.[^.]*$//' | sed 's/\.//g' )"
-declare -a V_REPO_VERSION_NUMS="$( find ${V_LOCAL_REPO} -type f -name "*.rpm" | sort | cut -f4 -d"-" | sed 's/\.[^.]*$//' | sed 's/\.//g' )"
+V_HTTP_REPO="$(curl -s -H 'Snap-Device-Series: 16' http://api.snapcraft.io/v2/snaps/info/spotify | jq -r '."channel-map"[] | select(.channel.name=='\"$PREF_CHANNEL\"') | .download.url')"
+V_HTTP_VERSION="$(curl -s -H 'Snap-Device-Series: 16' http://api.snapcraft.io/v2/snaps/info/spotify | jq -r '."channel-map"[] | select(.channel.name=='\"$PREF_CHANNEL\"') | .version')"
+V_HTTP_SNAP="$(basename "${V_HTTP_REPO}")"
+
+# Read repo versions
+readarray -t V_REPO_VERSION_NUMS < <( find "${V_LOCAL_REPO}" -type f -name "*.rpm" | sort | cut -f4 -d"-")
+
+# Add installed version if available
+if rpm -q "${V_PKGNAME}" > /dev/null 2>&1; then
+  V_REPO_VERSION_NUMS+=("$(rpm -q "${V_PKGNAME}" | cut -f3 -d"-")")
+fi
 
 echo "Comparing snapcraft.io repo version to installed or local machine repo version (if any)"
 
-for V_REPO_VERSION_NUM in ${V_REPO_VERSION_NUMS[@]}; do
-if [[ $V_HTTP_VERSION_NUM == $V_REPO_VERSION_NUM ]] || [[ $V_HTTP_VERSION_NUM -lt $V_REPO_VERSION_NUM ]]; then
-V_MATCHEDVERSION=TRUE
-break
-fi
+# Default to TRUE
+V_SNAPISNEWER=TRUE
+
+# Compare versions
+V_HIGHEST_VERSION="0"
+for V_REPO_VERSION_NUM in "${V_REPO_VERSION_NUMS[@]}"; do
+  if rpmdev-vercmp "$V_REPO_VERSION_NUM" "$V_HIGHEST_VERSION" | grep -q " > "; then
+    V_HIGHEST_VERSION="$V_REPO_VERSION_NUM"
+  fi
 done
 
-if [[ $V_HTTP_VERSION_NUM == $V_INSTALL_VERSION_NUM ]]; then
-V_MATCHEDVERSION=TRUE
+if rpmdev-vercmp "$V_HTTP_VERSION" "$V_HIGHEST_VERSION" | grep -q " > "; then
+  V_SNAPISNEWER=TRUE
+else
+  V_SNAPISNEWER=FALSE
 fi
 
-if [[ "${V_MATCHEDVERSION}" == "TRUE" ]]; then
+if [[ "${V_SNAPISNEWER}" == "FALSE" ]]; then
  if [[ "${V_RUN_MODE}" != "prompt" ]]; then
   echo "${V_PKGNAME} ${V_HTTP_VERSION} is already installed or available from local machine repo. Quitting"
   f_cleanup
@@ -406,6 +400,7 @@ Url:    https://www.spotify.com
 Source:   %{name}-%{version}.tar.gz
 BuildRoot:  %{_tmppath}/%{name}-%{version}-build
 BuildRequires:  update-desktop-files
+Requires: glibc
 Requires: libasound2
 Requires: libatk-bridge-2_0-0
 Requires: libatomic1
@@ -414,11 +409,6 @@ Requires: libgbm1
 Requires: libglib-2_0-0
 Requires: libgtk-3-0
 Requires: mozilla-nss
-%if 0%{?sle_version} <= 150000 && 0%{?is_opensuse} || 0%{?sle_version} <= 150000 && !0%{?is_opensuse}
-Requires: libopenssl1_0_0
-%else
-Requires: libopenssl1_1
-%endif
 Requires: libxshmfence1
 Requires: libXss1
 Requires: libXtst6
@@ -588,11 +578,14 @@ echo "done!"
 }
 
 f_set_channel() {
-sed -i "s/\(PREF_CHANNEL=\)\(.*\)/\1$PREF_CHANNEL/" "${V_CONFIG_FILE}"
-sed -i "s/\(PREF_PROMPT_CHANNEL=\)\(.*\)/\1NO/" "${V_CONFIG_FILE}"
-echo "done!"
+if [[ -z $PREF_CHANNEL ]]; then
+ f_error "Please specify either 'stable' or 'edge'"
+else
+ sed -i "s/\(PREF_CHANNEL=\)\(.*\)/\1$PREF_CHANNEL/" "${V_CONFIG_FILE}"
+ sed -i "s/\(PREF_PROMPT_CHANNEL=\)\(.*\)/\1NO/" "${V_CONFIG_FILE}"
+ echo "done!"
+fi
 }
-
 
 f_main() {
 while [ "$1" != "" ]; do
@@ -600,7 +593,6 @@ while [ "$1" != "" ]; do
     -h | --help )       V_RUN_MODE="help"
                         f_logo
                         f_help
-                        exit 0
                         ;;
     --quiet )           V_RUN_MODE="quiet"
                         f_logo

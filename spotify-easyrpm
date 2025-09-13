@@ -97,6 +97,7 @@ f_cleanup() {
 rm "${V_SOURCES_DIR:?}"/*.snap > /dev/null 2>&1
 rm -rf "${V_SNAP_EXTRACT_DIR:?}" > /dev/null 2>&1
 rm -rf "${V_SOURCES_DIR:?}"/"${V_PKGNAME}"* > /dev/null 2>&1
+rm -rf "${V_SPECS_DIR}"/spotify.spec > /dev/null 2>&1
 rm -rf "${V_BUILDROOT_DIR:?}"/"${V_PKGNAME}"* > /dev/null 2>&1
 }
 

@@ -276,7 +276,7 @@ f_remove_repo() {
 }
 
 f_install_build_deps() {
-for pkg in rpm-build squashfs jq rpmdevtools; do
+for pkg in rpm-build squashfs jq rpmdevtools hicolor-icon-theme; do
   if ! rpm -q "${pkg}" > /dev/null 2>&1; then
     echo "Installing build dependencies (${pkg})"
     if ! sudo zypper --non-interactive in "${pkg}"; then
@@ -299,13 +299,13 @@ cat << EOF > "${V_SOURCES_DIR}"/"${V_PKGNAME}"/usr/share/applications/spotify.de
 Name=Spotify
 GenericName=Music Player
 Comment=Spotify streaming music client
-Icon=/usr/share/spotify/icons/spotify-linux-64.png
+Icon=spotify-client
 Exec=spotify %U
 TryExec=spotify
 Terminal=false
 Type=Application
-Categories=Audio;Music;Player;AudioVideo;
-MimeType=x-scheme-handler/spotify;
+Categories=Audio;Music;Player;AudioVideo;Qt;
+MimeType=x-scheme-handler/spotify
 EOF
 }
 
@@ -399,7 +399,9 @@ Vendor:   Spotify AB
 Url:    https://www.spotify.com
 Source:   %{name}-%{version}.tar.gz
 BuildRoot:  %{_tmppath}/%{name}-%{version}-build
+BuildRequires: hicolor-icon-theme
 Requires: glibc
+Requires: hicolor-icon-theme
 Requires: libasound2
 Requires: libatk-bridge-2_0-0
 Requires: libatomic1
@@ -443,17 +445,31 @@ Spotify on Linux systems.
 %install
 mkdir -p %{buildroot}%{_prefix}
 cp -r usr %{buildroot}/
+for ICON in %{buildroot}%{_datadir}/spotify/icons/*.png ; do
+ FN=\`basename \$ICON\`
+ SIZE=\`echo \$ICON | sed 's/.*\\/spotify-linux-\\([0-9]*\\)\\.png\$/\\1/'\`
+ mkdir -p %{buildroot}%{_datadir}/icons/hicolor/\${SIZE}x\${SIZE}/apps
+ ln -s ../../../../spotify/icons/\$FN %{buildroot}%{_datadir}/icons/hicolor/\${SIZE}x\${SIZE}/apps/spotify-client.png
+done
 
 %post
 %desktop_database_post
 
+if [ -f "%{_datadir}/icons/hicolor/index.theme" ]; then
+  %{_bindir}/gtk-update-icon-cache --quiet --force "%{_datadir}/icons/hicolor"
+fi
+
 %postun
 %desktop_database_postun
 
+if [ -f "%{_datadir}/icons/hicolor/index.theme" ]; then
+  %{_bindir}/gtk-update-icon-cache --quiet --force "%{_datadir}/icons/hicolor"
+fi
+
 %files
 %defattr(-,root,root)
-%dir %{_datadir}/spotify
-%{_datadir}/spotify/*
+%{_datadir}/icons/hicolor/*/apps/spotify-client.png
+%{_datadir}/spotify
 %{_datadir}/applications/spotify.desktop
 %{_bindir}/spotify
 EOF

@@ -276,7 +276,7 @@ f_remove_repo() {
 }
 
 f_install_build_deps() {
-for pkg in rpm-build update-desktop-files squashfs jq rpmdevtools; do
+for pkg in rpm-build squashfs jq rpmdevtools; do
   if ! rpm -q "${pkg}" > /dev/null 2>&1; then
     echo "Installing build dependencies (${pkg})"
     if ! sudo zypper --non-interactive in "${pkg}"; then
@@ -399,7 +399,6 @@ Vendor:   Spotify AB
 Url:    https://www.spotify.com
 Source:   %{name}-%{version}.tar.gz
 BuildRoot:  %{_tmppath}/%{name}-%{version}-build
-BuildRequires:  update-desktop-files
 Requires: glibc
 Requires: libasound2
 Requires: libatk-bridge-2_0-0

@@ -147,6 +147,10 @@ fi
 }
 
 
+f_check_metered() {
+  test -n "`(LC_ALL=C.UTF-8 ; export LC_ALL ; nmcli -t -f active,name connection show 2>/dev/null | sed -n 's/^yes://p' | while read ; do nmcli connection show "$REPLY" | grep '^connection\.metered:[[:space:]]*yes' ; done )`"
+}
+
 f_release_channel() {
 if [[ "${PREF_PROMPT_CHANNEL}" == "YES" ]] && [[ "${V_RUN_MODE}" == "prompt" ]]; then
   while true
@@ -627,6 +631,7 @@ while [ "$1" != "" ]; do
                         break
                         ;;
     --scheduled | -scheduled )  V_RUN_MODE="scheduled"
+                        if f_check_metered ; then break ; fi
                         f_release_channel
                         f_ver_compare
                         f_download

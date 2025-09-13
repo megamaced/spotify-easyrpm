@@ -419,16 +419,23 @@ Suggests: libnotify4
 AutoReq:  no
 
 %description
-The Spotify desktop client unofficially supports Linux, meaning that there is a
-native client for Linux but we do not offer official support for client-related
-problems on this platform. If you are having severe problems with the native
-Linux client, there are a few alternatives that you can try:
 
-- Using the web player: https://play.spotify.com (requires Adobe Flash plugin)
-- Running the native Windows client in Wine (not recommended, but should work)
+The Spotify desktop client officially supports Linux, but only Debian and
+Ubuntu snap. This is an unofficial openSUSE re-packaging of the official
+snap package. You can use it without snapd and dependent downloads.
 
-Otherwise, the native Linux client is the recommended way to listen to Spotify
-on Linux systems.
+
+If you are having severe problems with the native Linux client, there are a
+few alternatives that you can try:
+
+- Use the official snap (requires snapd is available in the openSUSE Build
+  Service).
+- Using the web player: https://play.spotify.com/
+- Running the native Windows client in Wine (not recommended, but should
+  work)
+
+Otherwise, the native Linux client is the recommended way to listen to
+Spotify on Linux systems.
 
 %prep
 %setup -q -n %{name}
@@ -438,18 +445,10 @@ mkdir -p %{buildroot}%{_prefix}
 cp -r usr %{buildroot}/
 
 %post
-
 %desktop_database_post
 
-if [[ ! -f %{_libdir}/libcurl-gnutls.so.4 ]]; then
- ln -s %{_libdir}/libcurl.so.4 %{_libdir}/libcurl-gnutls.so.4
-fi
-
 %postun
-
 %desktop_database_postun
-
-%clean
 
 %files
 %defattr(-,root,root)
@@ -533,10 +532,10 @@ if [[ ! -f "${SYSTEMD_TIMER}" ]]; then
  echo "Creating automated Spotify builds"
  mkdir -p "${SYSTEMD_UNIT_DIR}"
  cat << EOF > "${SYSTEMD_UNIT}"
-[Unit]                                                                                                                             
-Description=${V_PRG_NAME} script                                                                                                                                                                         
-                                                                                                                                                                                                              
-[Service]                                                                                                                                                                
+[Unit]
+Description=${V_PRG_NAME} script
+
+[Service]
 ExecStart=/usr/bin/${V_PRG_NAME} --scheduled
 
 EOF

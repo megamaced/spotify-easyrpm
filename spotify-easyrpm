@@ -97,6 +97,7 @@ f_cleanup() {
 rm "${V_SOURCES_DIR:?}"/*.snap > /dev/null 2>&1
 rm -rf "${V_SNAP_EXTRACT_DIR:?}" > /dev/null 2>&1
 rm -rf "${V_SOURCES_DIR:?}"/"${V_PKGNAME}"* > /dev/null 2>&1
+rm -rf "${V_SPECS_DIR}"/spotify.spec > /dev/null 2>&1
 rm -rf "${V_BUILDROOT_DIR:?}"/"${V_PKGNAME}"* > /dev/null 2>&1
 }
 
@@ -145,6 +146,10 @@ if [ -z "${PREF_PROMPT_CHANNEL}" ]; then
 fi
 }
 
+
+f_check_metered() {
+  test -n "`(LC_ALL=C.UTF-8 ; export LC_ALL ; nmcli -t -f active,name connection show 2>/dev/null | sed -n 's/^yes://p' | while read ; do nmcli connection show "$REPLY" | grep '^connection\.metered:[[:space:]]*yes' ; done )`"
+}
 
 f_release_channel() {
 if [[ "${PREF_PROMPT_CHANNEL}" == "YES" ]] && [[ "${V_RUN_MODE}" == "prompt" ]]; then
@@ -276,7 +281,7 @@ f_remove_repo() {
 }
 
 f_install_build_deps() {
-for pkg in rpm-build update-desktop-files squashfs jq rpmdevtools; do
+for pkg in rpm-build squashfs jq rpmdevtools hicolor-icon-theme; do
   if ! rpm -q "${pkg}" > /dev/null 2>&1; then
     echo "Installing build dependencies (${pkg})"
     if ! sudo zypper --non-interactive in "${pkg}"; then
@@ -299,13 +304,13 @@ cat << EOF > "${V_SOURCES_DIR}"/"${V_PKGNAME}"/usr/share/applications/spotify.de
 Name=Spotify
 GenericName=Music Player
 Comment=Spotify streaming music client
-Icon=/usr/share/spotify/icons/spotify-linux-64.png
+Icon=spotify-client
 Exec=spotify %U
 TryExec=spotify
 Terminal=false
 Type=Application
-Categories=Audio;Music;Player;AudioVideo;
-MimeType=x-scheme-handler/spotify;
+Categories=Audio;Music;Player;AudioVideo;Qt;
+MimeType=x-scheme-handler/spotify
 EOF
 }
 
@@ -399,8 +404,9 @@ Vendor:   Spotify AB
 Url:    https://www.spotify.com
 Source:   %{name}-%{version}.tar.gz
 BuildRoot:  %{_tmppath}/%{name}-%{version}-build
-BuildRequires:  update-desktop-files
+BuildRequires: hicolor-icon-theme
 Requires: glibc
+Requires: hicolor-icon-theme
 Requires: libasound2
 Requires: libatk-bridge-2_0-0
 Requires: libatomic1
@@ -420,16 +426,23 @@ Suggests: libnotify4
 AutoReq:  no
 
 %description
-The Spotify desktop client unofficially supports Linux, meaning that there is a
-native client for Linux but we do not offer official support for client-related
-problems on this platform. If you are having severe problems with the native
-Linux client, there are a few alternatives that you can try:
 
-- Using the web player: https://play.spotify.com (requires Adobe Flash plugin)
-- Running the native Windows client in Wine (not recommended, but should work)
+The Spotify desktop client officially supports Linux, but only Debian and
+Ubuntu snap. This is an unofficial openSUSE re-packaging of the official
+snap package. You can use it without snapd and dependent downloads.
 
-Otherwise, the native Linux client is the recommended way to listen to Spotify
-on Linux systems.
+
+If you are having severe problems with the native Linux client, there are a
+few alternatives that you can try:
+
+- Use the official snap (requires snapd is available in the openSUSE Build
+  Service).
+- Using the web player: https://play.spotify.com/
+- Running the native Windows client in Wine (not recommended, but should
+  work)
+
+Otherwise, the native Linux client is the recommended way to listen to
+Spotify on Linux systems.
 
 %prep
 %setup -q -n %{name}
@@ -437,25 +450,31 @@ on Linux systems.
 %install
 mkdir -p %{buildroot}%{_prefix}
 cp -r usr %{buildroot}/
+for ICON in %{buildroot}%{_datadir}/spotify/icons/*.png ; do
+ FN=\`basename \$ICON\`
+ SIZE=\`echo \$ICON | sed 's/.*\\/spotify-linux-\\([0-9]*\\)\\.png\$/\\1/'\`
+ mkdir -p %{buildroot}%{_datadir}/icons/hicolor/\${SIZE}x\${SIZE}/apps
+ ln -s ../../../../spotify/icons/\$FN %{buildroot}%{_datadir}/icons/hicolor/\${SIZE}x\${SIZE}/apps/spotify-client.png
+done
 
 %post
-
 %desktop_database_post
 
-if [[ ! -f %{_libdir}/libcurl-gnutls.so.4 ]]; then
- ln -s %{_libdir}/libcurl.so.4 %{_libdir}/libcurl-gnutls.so.4
+if [ -f "%{_datadir}/icons/hicolor/index.theme" ]; then
+  %{_bindir}/gtk-update-icon-cache --quiet --force "%{_datadir}/icons/hicolor"
 fi
 
 %postun
-
 %desktop_database_postun
 
-%clean
+if [ -f "%{_datadir}/icons/hicolor/index.theme" ]; then
+  %{_bindir}/gtk-update-icon-cache --quiet --force "%{_datadir}/icons/hicolor"
+fi
 
 %files
 %defattr(-,root,root)
-%dir %{_datadir}/spotify
-%{_datadir}/spotify/*
+%{_datadir}/icons/hicolor/*/apps/spotify-client.png
+%{_datadir}/spotify
 %{_datadir}/applications/spotify.desktop
 %{_bindir}/spotify
 EOF
@@ -534,10 +553,10 @@ if [[ ! -f "${SYSTEMD_TIMER}" ]]; then
  echo "Creating automated Spotify builds"
  mkdir -p "${SYSTEMD_UNIT_DIR}"
  cat << EOF > "${SYSTEMD_UNIT}"
-[Unit]                                                                                                                             
-Description=${V_PRG_NAME} script                                                                                                                                                                         
-                                                                                                                                                                                                              
-[Service]                                                                                                                                                                
+[Unit]
+Description=${V_PRG_NAME} script
+
+[Service]
 ExecStart=/usr/bin/${V_PRG_NAME} --scheduled
 
 EOF
@@ -612,6 +631,7 @@ while [ "$1" != "" ]; do
                         break
                         ;;
     --scheduled | -scheduled )  V_RUN_MODE="scheduled"
+                        if f_check_metered ; then break ; fi
                         f_release_channel
                         f_ver_compare
                         f_download

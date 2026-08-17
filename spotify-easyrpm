@@ -725,7 +725,7 @@ f_secure_repo
 f_update_local_repo
 if [[ ! -f /etc/zypp/repos.d/${V_PRG_NAME}.repo ]]; then
  echo "Adding local file system repository to zypper"
- if ! sudo zypper ar -G --refresh "${V_LOCAL_REPO}" "${V_PRG_NAME}"; then
+ if ! sudo zypper ar -G --refresh -K "${V_LOCAL_REPO}" "${V_PRG_NAME}"; then
   f_error "Failed to add local repo to zypper. Aborting"
  fi
 fi

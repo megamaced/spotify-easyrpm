@@ -10,7 +10,7 @@ Spotify-EasyRPM is a script which automates the installing and updating of Spoti
 * Convert the snap package to RPM format
 * Install the Spotify RPM
 * Automated Spotify update check
-* Update Spofity alongside your regular system updates
+* Update Spotify alongside your regular system updates
 * Create a local filesystem repo
 * Fully unattended quiet mode
 
@@ -64,7 +64,7 @@ $> spotify-easyrpm --clean-repo
 ## Auto Updates
 
 spotify-easyrpm can create a systemd user timer job which will run daily and 5 minutes after user login.
-This will call the script to do a light check against the Spotify debian repo for a new release.
+This will call the script to do a light check against snapcraft.io for a new release.
 If a new release is found, a build process is kicked off in the background and the final RPM will
 be placed on your machine in a local filesystem repo (/var/cache/spotify-easyrpm).
 The next time you run the system updater or zypper up you will see spotify-client appear as an

@@ -2,6 +2,8 @@
 #
 #set -x
 
+# The config file path is only known at runtime
+# shellcheck disable=SC1090
 
 V_PRG_NAME="spotify-easyrpm"
 V_CONFIG_FILE="${HOME}/.${V_PRG_NAME}"
@@ -17,6 +19,10 @@ V_RPMS_DIR="${V_TOPDIR}/RPMS"
 V_BUILDROOT_DIR="${V_TOPDIR}/BUILDROOT"
 
 V_SNAP_EXTRACT_DIR="${V_SOURCES_DIR}/spotify-snap"
+
+# Packages we need installed, and tools we need on PATH
+V_DEP_PKGS=(rpm-build squashfs jq rpmdevtools hicolor-icon-theme)
+V_DEP_CMDS=(curl wget openssl)
 
 SYSTEMD_UNIT_DIR="${HOME}/.local/share/systemd/user"
 SYSTEMD_UNIT="${SYSTEMD_UNIT_DIR}/${V_PRG_NAME}.service"
@@ -93,6 +99,35 @@ exit 1
 }
 
 
+f_abort() {
+echo "$1" 1>&2
+f_cleanup
+exit 1
+}
+
+
+f_abort_no_input() {
+f_abort "No input received. Use --quiet to run unattended"
+}
+
+
+f_ver_gt() {
+# True when version $1 is higher than version $2. rpmdev-vercmp exits
+# 11 for greater than, 12 for less than and 0 for equal
+V_VERCMP_RC=0
+rpmdev-vercmp "$1" "$2" > /dev/null 2>&1 || V_VERCMP_RC="$?"
+[[ "${V_VERCMP_RC}" == "11" ]]
+}
+
+
+f_rpm_version() {
+# Read the version field out of an RPM file name we created ourselves
+V_RPM_VERSION="$(basename "$1")"
+V_RPM_VERSION="${V_RPM_VERSION#"${V_PKGNAME}"-}"
+echo "${V_RPM_VERSION%%-*}"
+}
+
+
 f_cleanup() {
 rm "${V_SOURCES_DIR:?}"/*.snap > /dev/null 2>&1
 rm -rf "${V_SNAP_EXTRACT_DIR:?}" > /dev/null 2>&1
@@ -148,14 +183,24 @@ fi
 
 
 f_check_metered() {
-  test -n "`(LC_ALL=C.UTF-8 ; export LC_ALL ; nmcli -t -f active,name connection show 2>/dev/null | sed -n 's/^yes://p' | while read ; do nmcli connection show "$REPLY" | grep '^connection\.metered:[[:space:]]*yes' ; done )`"
+# True when any active NetworkManager connection is marked as metered
+if ! command -v nmcli > /dev/null 2>&1; then
+ return 1
+fi
+while IFS= read -r V_ACTIVE_CONN; do
+ if LC_ALL=C.UTF-8 nmcli connection show "${V_ACTIVE_CONN}" 2>/dev/null | grep -q '^connection\.metered:[[:space:]]*yes'; then
+  echo "Active connection ${V_ACTIVE_CONN} is metered. Skipping this run"
+  return 0
+ fi
+done < <(LC_ALL=C.UTF-8 nmcli -t -f active,name connection show 2>/dev/null | sed -n 's/^yes://p')
+return 1
 }
 
 f_release_channel() {
 if [[ "${PREF_PROMPT_CHANNEL}" == "YES" ]] && [[ "${V_RUN_MODE}" == "prompt" ]]; then
   while true
    do
-    read -rp "Do you wish to download the Spotify stable or edge release (s/e)?" Q_RELEASE_CHANNEL
+    read -rp "Do you wish to download the Spotify stable or edge release (s/e)?" Q_RELEASE_CHANNEL || f_abort_no_input
 
   case $Q_RELEASE_CHANNEL in
   s )  sed -i "s/\(PREF_PROMPT_CHANNEL=\)\(.*\)/\1NO/" "${V_CONFIG_FILE}"
@@ -172,15 +217,35 @@ if [[ "${PREF_PROMPT_CHANNEL}" == "YES" ]] && [[ "${V_RUN_MODE}" == "prompt" ]];
        sleep 3
    break;;
 
+  * )  echo "Please answer s or e";;
+
   esac
  done
- fi 
+ fi
 }
 
 f_download() {
 echo "Downloading the latest Spotify snap"
-if ! wget -q -P "${V_SOURCES_DIR}"/ "${V_HTTP_REPO}"; then
+# Show a progress bar when someone is watching, stay silent for the timer
+V_WGET_OPTS=(-q)
+if [[ -t 1 ]] && wget --help 2>&1 | grep -q -- '--show-progress'; then
+ V_WGET_OPTS+=(--show-progress)
+fi
+if ! wget "${V_WGET_OPTS[@]}" -P "${V_SOURCES_DIR}"/ "${V_HTTP_REPO}"; then
 f_error "Failed to download Spotify. Aborting"
+fi
+f_verify_snap
+}
+
+
+f_verify_snap() {
+if [[ -z "${V_HTTP_SHA3_384}" ]] || [[ "${V_HTTP_SHA3_384}" == "null" ]]; then
+ f_error "snapcraft.io did not provide a checksum for ${V_HTTP_SNAP}. Aborting"
+fi
+echo "Verifying the snap checksum"
+V_LOCAL_SHA3_384="$(openssl dgst -sha3-384 "${V_SOURCES_DIR}"/"${V_HTTP_SNAP}" | awk '{print $NF}')"
+if [[ "${V_LOCAL_SHA3_384}" != "${V_HTTP_SHA3_384}" ]]; then
+ f_error "Checksum mismatch on ${V_HTTP_SNAP}. Expected ${V_HTTP_SHA3_384} but got ${V_LOCAL_SHA3_384}. Aborting"
 fi
 }
 
@@ -190,12 +255,12 @@ echo "Creating build dirs in ${V_TOPDIR}"
 if ! mkdir -p "${V_TOPDIR}"/{BUILD,BUILDROOT,OTHER,RPMS,SOURCES,SPECS,SRPMS}; then
 f_error "Failed to create rpmbuild root. Aborting"
 fi
-V_RPMBUILD_OWNER_CHECK="$(find "${V_TOPDIR}" -not -user "$(id -u)")"
+V_RPMBUILD_OWNER_CHECK="$(find "${V_TOPDIR}" -not -user "$(id -u)" -print -quit)"
 if [[ -n "${V_RPMBUILD_OWNER_CHECK}" ]]; then
-  echo "Detected some directories / files not owned by you. Fixing ${V_RPMBUILD_OWNER_CHECK}"
-  for i in ${V_RPMBUILD_OWNER_CHECK}; do
-    sudo chown "$(id -u)" "$i"
-  done
+  echo "Detected some directories / files not owned by you. Fixing ownership under ${V_TOPDIR}"
+  if ! sudo find "${V_TOPDIR}" -not -user "$(id -u)" -exec chown "$(id -u)":"$(id -g)" {} \+; then
+    f_error "Failed to fix ownership under ${V_TOPDIR}. Aborting"
+  fi
 fi
 if [[ ! -f "${HOME}"/.rpmmacros ]]; then
  echo "Creating ${HOME}/.rpmmacros"
@@ -209,7 +274,18 @@ fi
 
 f_extract_snap() {
 echo "Extracting snap and preparing"
-unsquashfs -d "${V_SNAP_EXTRACT_DIR}"  "${V_SOURCES_DIR}"/"${V_HTTP_SNAP}" || f_error "Failed to extract snap"
+# Drop the processor / inode / created file counts and the progress bar.
+# Errors are still printed. The help spells these as -q[uiet] and
+# -n[o-progress], so only pass them when this squashfs advertises them
+V_UNSQUASHFS_HELP="$(unsquashfs -help 2>&1)"
+V_UNSQUASHFS_OPTS=()
+if grep -qE '^[[:space:]]+-q(\[uiet\]|uiet)' <<< "${V_UNSQUASHFS_HELP}"; then
+ V_UNSQUASHFS_OPTS+=(-quiet)
+fi
+if grep -qE '^[[:space:]]+-n(\[o-progress\]|o-progress)' <<< "${V_UNSQUASHFS_HELP}"; then
+ V_UNSQUASHFS_OPTS+=(-no-progress)
+fi
+unsquashfs "${V_UNSQUASHFS_OPTS[@]}" -d "${V_SNAP_EXTRACT_DIR}" "${V_SOURCES_DIR}"/"${V_HTTP_SNAP}" || f_error "Failed to extract snap"
 mkdir -p "${V_SOURCES_DIR}"/"${V_PKGNAME}"/usr/{share/applications,bin}
 mv "${V_SNAP_EXTRACT_DIR}"/usr/share/spotify "${V_SOURCES_DIR}"/"${V_PKGNAME}"/usr/share
 mv "${V_SNAP_EXTRACT_DIR}"/usr/bin/spotify "${V_SOURCES_DIR}"/"${V_PKGNAME}"/usr/bin
@@ -217,10 +293,19 @@ mv "${V_SNAP_EXTRACT_DIR}"/usr/bin/spotify "${V_SOURCES_DIR}"/"${V_PKGNAME}"/usr
 
 
 f_script_location_check() {
-if [[ ! -f /usr/bin/"${V_PRG_NAME}" ]] || ! diff "${0}" /usr/bin/"${V_PRG_NAME}" > /dev/null 2>&1; then
- echo "Copying ${V_PRG_NAME} to /usr/bin/${V_PRG_NAME} for the schedule to work"
- sudo cp "${0}" /usr/bin/"${V_PRG_NAME}"
+if [[ "$(readlink -f "${0}")" == /usr/bin/"${V_PRG_NAME}" ]]; then
+ return 0
 fi
+if [[ -f /usr/bin/"${V_PRG_NAME}" ]] && diff "${0}" /usr/bin/"${V_PRG_NAME}" > /dev/null 2>&1; then
+ return 0
+fi
+if rpm -qf /usr/bin/"${V_PRG_NAME}" > /dev/null 2>&1; then
+ echo "/usr/bin/${V_PRG_NAME} is owned by an installed package and differs from this copy"
+ echo "Leaving it alone. The schedule will run the packaged version"
+ return 0
+fi
+echo "Copying ${V_PRG_NAME} to /usr/bin/${V_PRG_NAME} for the schedule to work"
+sudo cp "${0}" /usr/bin/"${V_PRG_NAME}"
 }
 
 
@@ -230,7 +315,7 @@ echo "Checking for an existing schedule"
   if [[ "${V_RUN_MODE}" == "create-schedule" ]] || [[ "${PREF_PROMPT_SCHEDULE}" != "NO" ]]; then
   while true
   do
-   read -rp "Do you wish to set up an automated update schedule (y/n)?" Q_SCHEDULE_ANSWER
+   read -rp "Do you wish to set up an automated update schedule (y/n)?" Q_SCHEDULE_ANSWER || f_abort_no_input
 
   case $Q_SCHEDULE_ANSWER in
   y ) f_create_repo
@@ -242,6 +327,8 @@ echo "Checking for an existing schedule"
       sed -i "s/\(PREF_PROMPT_SCHEDULE=\)\(.*\)/\1NO/" "${V_CONFIG_FILE}"
       break;;
 
+  * ) echo "Please answer y or n";;
+
   esac
  done
 else
@@ -249,22 +336,30 @@ else
  fi
 else
   echo "Found existing schedule. Skipping"
-  f_update_local_repo
+  if [[ -d "${V_LOCAL_REPO}" ]]; then
+   f_secure_repo
+   f_update_local_repo
+  else
+   echo "Local repo ${V_LOCAL_REPO} is missing. Recreating it"
+   f_create_repo
+  fi
 fi
 }
 
 
 f_remove_schedule() {
- if [[ -f "${SYSTEMD_UNIT}" ]]; then
-  echo "Removing ${V_PRG_NAME} from your systemd unit files"
-  systemctl --user disable spotify-easyrpm
-  rm "${SYSTEMD_UNIT}"
-  systemctl --user daemon-reload
- fi
  if [[ -f "${SYSTEMD_TIMER}" ]]; then
   echo "Removing ${V_PRG_NAME} from your systemd timers"
-  systemctl --user disable spotify-easyrpm.timer
+  systemctl --user stop "${V_PRG_NAME}.timer"
+  systemctl --user disable "${V_PRG_NAME}.timer"
   rm "${SYSTEMD_TIMER}"
+  systemctl --user daemon-reload
+ fi
+ if [[ -f "${SYSTEMD_UNIT}" ]]; then
+  echo "Removing ${V_PRG_NAME} from your systemd unit files"
+  systemctl --user stop "${V_PRG_NAME}"
+  systemctl --user disable "${V_PRG_NAME}"
+  rm "${SYSTEMD_UNIT}"
   systemctl --user daemon-reload
  fi
 }
@@ -280,15 +375,43 @@ f_remove_repo() {
  fi
 }
 
-f_install_build_deps() {
-for pkg in rpm-build squashfs jq rpmdevtools hicolor-icon-theme; do
+f_missing_build_deps() {
+# Fills V_MISSING_DEPS with whatever we need but do not have. Packages are
+# checked with rpm, tools with command -v so a rename upstream cannot hide them
+V_MISSING_DEPS=()
+for pkg in "${V_DEP_PKGS[@]}"; do
   if ! rpm -q "${pkg}" > /dev/null 2>&1; then
-    echo "Installing build dependencies (${pkg})"
-    if ! sudo zypper --non-interactive in "${pkg}"; then
-      f_error "Failed to install build dependencies (${pkg}). Aborting"
-    fi
+    V_MISSING_DEPS+=("${pkg}")
   fi
 done
+for cmd in "${V_DEP_CMDS[@]}"; do
+  if ! command -v "${cmd}" > /dev/null 2>&1; then
+    V_MISSING_DEPS+=("${cmd}")
+  fi
+done
+}
+
+f_install_build_deps() {
+f_missing_build_deps
+for dep in "${V_MISSING_DEPS[@]}"; do
+  echo "Installing build dependencies (${dep})"
+  if ! sudo zypper --non-interactive in "${dep}"; then
+    f_error "Failed to install build dependencies (${dep}). Aborting"
+  fi
+done
+f_check_build_deps
+}
+
+f_check_build_deps() {
+# A scheduled run has no terminal for sudo to prompt on, so report what is
+# missing instead of trying to install it
+f_missing_build_deps
+if [[ "${#V_MISSING_DEPS[@]}" -gt 0 ]]; then
+ if [[ "${V_RUN_MODE}" == "scheduled" ]]; then
+  f_abort "Missing dependencies: ${V_MISSING_DEPS[*]}. Run ${V_PRG_NAME} --quiet to install them. Aborting"
+ fi
+ f_abort "Dependencies still missing after install: ${V_MISSING_DEPS[*]}. Aborting"
+fi
 }
 
 f_prepare_src() {
@@ -309,39 +432,67 @@ Exec=spotify --ozone-platform=x11 --disable-features=UseOzonePlatform %U
 TryExec=spotify
 Terminal=false
 Type=Application
-Categories=Audio;Music;Player;AudioVideo;Qt;
+Categories=Audio;Music;Player;AudioVideo;
 MimeType=x-scheme-handler/spotify
+StartupWMClass=spotify
 EOF
 }
 
 
 f_ver_compare() {
-V_HTTP_REPO="$(curl -s -H 'Snap-Device-Series: 16' http://api.snapcraft.io/v2/snaps/info/spotify | jq -r '."channel-map"[] | select(.channel.name=='\"$PREF_CHANNEL\"') | .download.url')"
-V_HTTP_VERSION="$(curl -s -H 'Snap-Device-Series: 16' http://api.snapcraft.io/v2/snaps/info/spotify | jq -r '."channel-map"[] | select(.channel.name=='\"$PREF_CHANNEL\"') | .version')"
+echo "Asking snapcraft.io for the latest ${PREF_CHANNEL} Spotify release"
+if ! V_SNAP_INFO="$(curl -sfL -H 'Snap-Device-Series: 16' https://api.snapcraft.io/v2/snaps/info/spotify)"; then
+  f_error "Failed to query snapcraft.io for the latest Spotify release. Aborting"
+fi
+
+V_SNAP_ENTRY="$(jq -c --arg channel "${PREF_CHANNEL}" 'first(."channel-map"[] | select(.channel.name==$channel and .channel.architecture=="amd64"))' <<< "${V_SNAP_INFO}")"
+if [[ -z "${V_SNAP_ENTRY}" ]] || [[ "${V_SNAP_ENTRY}" == "null" ]]; then
+  f_error "snapcraft.io has no ${PREF_CHANNEL} release for Spotify. Aborting"
+fi
+
+V_HTTP_REPO="$(jq -r '.download.url' <<< "${V_SNAP_ENTRY}")"
+V_HTTP_VERSION="$(jq -r '.version' <<< "${V_SNAP_ENTRY}")"
+V_HTTP_SHA3_384="$(jq -r '.download."sha3-384"' <<< "${V_SNAP_ENTRY}")"
+
+if [[ -z "${V_HTTP_REPO}" ]] || [[ "${V_HTTP_REPO}" == "null" ]]; then
+  f_error "snapcraft.io did not return a download URL for Spotify. Aborting"
+fi
+
 V_HTTP_SNAP="$(basename "${V_HTTP_REPO}")"
 
+# RPM does not allow "-" in the version field
+V_HTTP_VERSION="${V_HTTP_VERSION//-/.}"
+if [[ ! "${V_HTTP_VERSION}" =~ ^[A-Za-z0-9._+~^]+$ ]]; then
+  f_error "snapcraft.io returned an unusable version string (${V_HTTP_VERSION}). Aborting"
+fi
+
 # Read repo versions
-readarray -t V_REPO_VERSION_NUMS < <( find "${V_LOCAL_REPO}" -type f -name "*.rpm" | sort | cut -f4 -d"-")
+V_REPO_VERSION_NUMS=()
+if [[ -d "${V_LOCAL_REPO}" ]]; then
+  while IFS= read -r V_REPO_RPM; do
+    V_REPO_VERSION_NUMS+=("$(f_rpm_version "${V_REPO_RPM}")")
+  done < <(find "${V_LOCAL_REPO}" -type f -name "${V_PKGNAME}-[0-9]*.rpm")
+fi
 
 # Add installed version if available
 if rpm -q "${V_PKGNAME}" > /dev/null 2>&1; then
-  V_REPO_VERSION_NUMS+=("$(rpm -q "${V_PKGNAME}" | cut -f3 -d"-")")
+  V_REPO_VERSION_NUMS+=("$(rpm -q --queryformat '%{VERSION}' "${V_PKGNAME}")")
 fi
 
 echo "Comparing snapcraft.io repo version to installed or local machine repo version (if any)"
 
-# Default to TRUE
-V_SNAPISNEWER=TRUE
-
 # Compare versions
 V_HIGHEST_VERSION="0"
 for V_REPO_VERSION_NUM in "${V_REPO_VERSION_NUMS[@]}"; do
-  if rpmdev-vercmp "$V_REPO_VERSION_NUM" "$V_HIGHEST_VERSION" | grep -q " > "; then
-    V_HIGHEST_VERSION="$V_REPO_VERSION_NUM"
+  if [[ -z "${V_REPO_VERSION_NUM}" ]]; then
+    continue
+  fi
+  if f_ver_gt "${V_REPO_VERSION_NUM}" "${V_HIGHEST_VERSION}"; then
+    V_HIGHEST_VERSION="${V_REPO_VERSION_NUM}"
   fi
 done
 
-if rpmdev-vercmp "$V_HTTP_VERSION" "$V_HIGHEST_VERSION" | grep -q " > "; then
+if f_ver_gt "${V_HTTP_VERSION}" "${V_HIGHEST_VERSION}"; then
   V_SNAPISNEWER=TRUE
 else
   V_SNAPISNEWER=FALSE
@@ -356,7 +507,7 @@ if [[ "${V_SNAPISNEWER}" == "FALSE" ]]; then
  while true
   do
    echo "The latest $PREF_CHANNEL version at snapcraft.io is ${V_HTTP_VERSION} which is already installed or available from local machine repo. "
-   read -rp "Continue anyway? (y/n)" Q_SAME_VER_CONTINUE
+   read -rp "Continue anyway? (y/n)" Q_SAME_VER_CONTINUE || f_abort_no_input
     case $Q_SAME_VER_CONTINUE in
 
       y ) echo "ok"
@@ -367,6 +518,8 @@ if [[ "${V_SNAPISNEWER}" == "FALSE" ]]; then
           echo "bye"
       exit;;
 
+      * ) echo "Please answer y or n";;
+
    esac
  done
  fi
@@ -376,6 +529,10 @@ fi
 
 f_rpm_spec() {
 echo "Writing new build file"
+
+# A timestamped release keeps rebuilds of an unchanged Spotify version
+# installable, so packaging changes are not stuck behind an upstream bump
+V_RPM_RELEASE="$(date -u +%Y%m%d%H%M)"
 
 cat << EOF > "${V_SPECS_DIR}"/spotify.spec
 #
@@ -395,9 +552,16 @@ cat << EOF > "${V_SPECS_DIR}"/spotify.spec
 # Please submit bugfixes or comments via http://bugs.opensuse.org/
 #
 
+# Repackaging a prebuilt binary, so there is nothing to extract debuginfo from
+%global debug_package %{nil}
+
+# Avoids "warning: Could not canonicalize hostname" on hosts that do not
+# resolve their own name
+%define _buildhost localhost
+
 Name:   ${V_PKGNAME}
 Version:  ${V_HTTP_VERSION}
-Release:  0
+Release:  ${V_RPM_RELEASE}
 License:  https://www.spotify.com/legal/end-user-agreement
 Summary:  Spotify streaming music client
 Vendor:   Spotify AB
@@ -497,7 +661,7 @@ if [[ "${V_RUN_MODE}" != "prompt" ]]; then
 else
  while true
   do
-   read -rp "Do you wish to install the Spotify RPM (y/n)?" Q_RPM_INSTALL
+   read -rp "Do you wish to install the Spotify RPM (y/n)?" Q_RPM_INSTALL || f_abort_no_input
 
   case $Q_RPM_INSTALL in
   y ) f_rpm_install
@@ -505,6 +669,8 @@ else
 
   n ) echo "OK not installing now"
    break;;
+
+  * ) echo "Please answer y or n";;
 
   esac
  done
@@ -520,6 +686,28 @@ fi
 }
 
 
+f_secure_repo() {
+# Only the invoking user needs write access here. A world writable repo
+# combined with gpgcheck=0 would let any local user stage a package that
+# zypper then installs as root
+if [[ ! -d "${V_LOCAL_REPO}" ]]; then
+ return 0
+fi
+if [[ "$(stat -c '%U %a' "${V_LOCAL_REPO}" 2>/dev/null)" == "$(id -un) 755" ]]; then
+ return 0
+fi
+echo "Restricting ${V_LOCAL_REPO} to your user"
+if ! sudo chown -R "$(id -u)":"$(id -g)" "${V_LOCAL_REPO}"; then
+ f_error "Failed to set ownership on ${V_LOCAL_REPO}. Aborting"
+fi
+if ! sudo find "${V_LOCAL_REPO}" -type d -exec chmod 755 {} \+; then
+ f_error "Failed to chmod ${V_LOCAL_REPO}"
+fi
+if ! sudo find "${V_LOCAL_REPO}" -type f -exec chmod 644 {} \+; then
+ f_error "Failed to chmod ${V_LOCAL_REPO}"
+fi
+}
+
 f_create_repo() {
 if ! rpm -q createrepo_c > /dev/null 2>&1; then
  echo "Installing CreateRepo for local filesystem repo"
@@ -529,16 +717,11 @@ if ! rpm -q createrepo_c > /dev/null 2>&1; then
 fi
 if [[ ! -d "${V_LOCAL_REPO}" ]]; then
  echo "Creating local filesystem repo at ${V_LOCAL_REPO}"
- if ! sudo mkdir -p ${V_LOCAL_REPO}; then
+ if ! sudo mkdir -p "${V_LOCAL_REPO}"; then
   f_error "Failed to create local filesystem repo at ${V_LOCAL_REPO}. Aborting"
  fi
 fi
-if ! sudo find ${V_LOCAL_REPO} -type d -exec chmod 777 {} \+; then
- f_error "Failed to chmod ${V_LOCAL_REPO}"
-fi
-if ! sudo find ${V_LOCAL_REPO} -type f -exec chmod 666 {} \+; then
- f_error "Failed to chmod ${V_LOCAL_REPO}"
-fi
+f_secure_repo
 f_update_local_repo
 if [[ ! -f /etc/zypp/repos.d/${V_PRG_NAME}.repo ]]; then
  echo "Adding local file system repository to zypper"
@@ -581,9 +764,12 @@ systemctl --user enable "${V_PRG_NAME}.timer"
 
 
 f_update_local_repo() {
+if [[ ! -d "${V_LOCAL_REPO}" ]]; then
+ f_error "Local repo ${V_LOCAL_REPO} does not exist. Run ${V_PRG_NAME} --create-schedule to recreate it. Aborting"
+fi
 if [[ "${V_RUN_MODE}" != "clean-repo" ]]; then
 echo "Moving any Spotify RPMs from your rpmbuild ${V_RPMS_DIR} to your local repo ${V_LOCAL_REPO}"
-find "${V_RPMS_DIR}"/"${V_RPM_ARCH}"/ -name "${V_PKGNAME}-*${V_RPM_ARCH}.rpm" -type f -exec mv -t "${V_LOCAL_REPO}" {} \+
+find "${V_RPMS_DIR}"/"${V_RPM_ARCH}"/ -name "${V_PKGNAME}-[0-9]*${V_RPM_ARCH}.rpm" -type f -exec mv -t "${V_LOCAL_REPO}" {} \+
 fi
 if ! createrepo -q "${V_LOCAL_REPO}"; then
  f_error "Failed to create / update local repo. Aborting"
@@ -591,19 +777,43 @@ fi
 }
 
 f_clean_repo() {
-sudo find "${V_LOCAL_REPO}" -type f -name "*.rpm" -exec rm {} \;
+if [[ ! -d "${V_LOCAL_REPO}" ]]; then
+ echo "No local repo at ${V_LOCAL_REPO}. Nothing to clean"
+ exit 0
+fi
+f_secure_repo
+
+# Work out which RPM to keep - the highest version, and for equal
+# versions the most recently built one
+V_KEEP_RPM=""
+V_KEEP_VERSION="0"
+while IFS= read -r V_REPO_RPM; do
+  V_REPO_VERSION="$(f_rpm_version "${V_REPO_RPM}")"
+  if [[ -z "${V_KEEP_RPM}" ]] || f_ver_gt "${V_REPO_VERSION}" "${V_KEEP_VERSION}" ||
+     { [[ "${V_REPO_VERSION}" == "${V_KEEP_VERSION}" ]] && [[ "${V_REPO_RPM}" -nt "${V_KEEP_RPM}" ]]; }; then
+    V_KEEP_RPM="${V_REPO_RPM}"
+    V_KEEP_VERSION="${V_REPO_VERSION}"
+  fi
+done < <(find "${V_LOCAL_REPO}" -type f -name "${V_PKGNAME}-[0-9]*.rpm")
+
+if [[ -z "${V_KEEP_RPM}" ]]; then
+ echo "No ${V_PKGNAME} RPMs found in ${V_LOCAL_REPO}"
+else
+ # Sweeps out any debuginfo / debugsource left by older versions of this script
+ echo "Keeping ${V_KEEP_RPM##*/} and removing everything older"
+ find "${V_LOCAL_REPO}" -type f -name "${V_PKGNAME}-*.rpm" ! -path "${V_KEEP_RPM}" -print -delete
+fi
 f_update_local_repo
 echo "done!"
 }
 
 f_set_channel() {
-if [[ -z $PREF_CHANNEL ]]; then
- f_error "Please specify either 'stable' or 'edge'"
-else
- sed -i "s/\(PREF_CHANNEL=\)\(.*\)/\1$PREF_CHANNEL/" "${V_CONFIG_FILE}"
- sed -i "s/\(PREF_PROMPT_CHANNEL=\)\(.*\)/\1NO/" "${V_CONFIG_FILE}"
- echo "done!"
+if [[ ! "${PREF_CHANNEL}" == "stable" ]] && [[ ! "${PREF_CHANNEL}" == "edge" ]]; then
+ f_abort "Please specify either 'stable' or 'edge'"
 fi
+sed -i "s/\(PREF_CHANNEL=\)\(.*\)/\1${PREF_CHANNEL}/" "${V_CONFIG_FILE}"
+sed -i "s/\(PREF_PROMPT_CHANNEL=\)\(.*\)/\1NO/" "${V_CONFIG_FILE}"
+echo "done!"
 }
 
 f_main() {
@@ -632,6 +842,7 @@ while [ "$1" != "" ]; do
                         ;;
     --scheduled | -scheduled )  V_RUN_MODE="scheduled"
                         if f_check_metered ; then break ; fi
+                        f_check_build_deps
                         f_release_channel
                         f_ver_compare
                         f_download

@@ -428,7 +428,7 @@ Name=Spotify
 GenericName=Music Player
 Comment=Spotify streaming music client
 Icon=spotify-client
-Exec=spotify --ozone-platform=x11 --disable-features=UseOzonePlatform %U
+Exec=spotify %U
 TryExec=spotify
 Terminal=false
 Type=Application

@@ -22,7 +22,7 @@ V_SNAP_EXTRACT_DIR="${V_SOURCES_DIR}/spotify-snap"
 
 # Packages we need installed, and tools we need on PATH
 V_DEP_PKGS=(rpm-build squashfs jq rpmdevtools hicolor-icon-theme)
-V_DEP_CMDS=(curl wget openssl)
+V_DEP_CMDS=(curl openssl)
 
 SYSTEMD_UNIT_DIR="${HOME}/.local/share/systemd/user"
 SYSTEMD_UNIT="${SYSTEMD_UNIT_DIR}/${V_PRG_NAME}.service"
@@ -37,7 +37,7 @@ cat <<EOF
 ┌─┐┌─┐┌─┐┌┬┐┬┌─┐┬ ┬   ┌─┐┌─┐┌─┐┬ ┬┬─┐┌─┐┌┬┐
 └─┐├─┘│ │ │ │├┤ └┬┘───├┤ ├─┤└─┐└┬┘├┬┘├─┘│││
 └─┘┴  └─┘ ┴ ┴└   ┴    └─┘┴ ┴└─┘ ┴ ┴└─┴  ┴ ┴
-Version: 4.0.1
+Version: 4.0.2
 EOF
 sleep 2
 cat <<EOF
@@ -227,11 +227,13 @@ if [[ "${PREF_PROMPT_CHANNEL}" == "YES" ]] && [[ "${V_RUN_MODE}" == "prompt" ]];
 f_download() {
 echo "Downloading the latest Spotify snap"
 # Show a progress bar when someone is watching, stay silent for the timer
-V_WGET_OPTS=(-q)
-if [[ -t 1 ]] && wget --help 2>&1 | grep -q -- '--show-progress'; then
- V_WGET_OPTS+=(--show-progress)
+V_CURL_OPTS=(-fL --retry 3)
+if [[ -t 1 ]]; then
+ V_CURL_OPTS+=(--progress-bar)
+else
+ V_CURL_OPTS+=(-sS)
 fi
-if ! wget "${V_WGET_OPTS[@]}" -P "${V_SOURCES_DIR}"/ "${V_HTTP_REPO}"; then
+if ! curl "${V_CURL_OPTS[@]}" -o "${V_SOURCES_DIR}"/"${V_HTTP_SNAP}" "${V_HTTP_REPO}"; then
 f_error "Failed to download Spotify. Aborting"
 fi
 f_verify_snap
